@@ -670,6 +670,44 @@ def config_gui():
         reset_button.pack_forget()
         remove_button.place(relx=0.5, rely=0.5, anchor="center")
 
+
+    # helper function to scroll only the specific textbox
+    # and prevent event propagation
+    def _scroll_textbox(event, textbox):
+        """Scrolls the textbox if scrollable, otherwise allows event propagation."""
+        first, last = textbox.yview()
+
+        # Check if the textbox is actually scrollable (content exceeds view)
+        is_scrollable = first != 0.0 or last != 1.0
+
+        if is_scrollable:
+            # Determine scroll direction (platform-dependent)
+            if event.num == 5 or event.delta < 0:
+                textbox.yview_scroll(1, "units")
+            elif event.num == 4 or event.delta > 0:
+                textbox.yview_scroll(-1, "units")
+            return "break"  # Stop event propagation ONLY if textbox was scrolled
+        else:
+            # If not scrollable, do nothing and let the event propagate
+            # to the parent scrollable frame by not returning "break".
+            pass 
+
+    def _on_textbox_enter(event, textbox):
+        """Bind mouse wheel to textbox scroll handler when mouse enters."""
+        # Always bind, the handler itself will decide whether to block propagation
+        textbox.bind("<MouseWheel>", lambda e: _scroll_textbox(e, textbox), add="+")
+        textbox.bind("<Button-4>", lambda e: _scroll_textbox(e, textbox), add="+") # Scroll up
+        textbox.bind("<Button-5>", lambda e: _scroll_textbox(e, textbox), add="+") # Scroll down
+
+    def _on_textbox_leave(event, textbox):
+        """Unbind mouse wheel from textbox scroll handler when mouse leaves."""
+        # Always unbind on leave
+        textbox.unbind("<MouseWheel>")
+        textbox.unbind("<Button-4>")
+        textbox.unbind("<Button-5>")
+    
+
+
     def render_scrollable_widget():
         """Render the scrollable widget with folders and extensions"""
         # Clear the scrollable frame
@@ -706,7 +744,7 @@ def config_gui():
             label_frame = ctk.CTkFrame(frame, corner_radius=10, width=200, height=40) 
             label_frame.pack_propagate(False)  # Prevent the frame from resizing based on its children
             label_frame.pack(side="left", padx=(5,2), pady=5)
-            
+
             # StringVar for folder entry
             folder_entry_var = ctk.StringVar(value=folder)
             
@@ -718,7 +756,11 @@ def config_gui():
             textbox = ctk.CTkTextbox(frame, width=200, height=60, font=("Cascadia Code", 12))
             textbox.pack(side="left", padx=(12,0), pady=5)
             textbox.insert("1.0", ', '.join(extensions))
-            
+
+            # Add event bindings for nested scrolling
+            textbox.bind("<Enter>", lambda e, tb=textbox: _on_textbox_enter(e, tb), add="+")
+            textbox.bind("<Leave>", lambda e, tb=textbox: _on_textbox_leave(e, tb), add="+")
+
             # Store the original values
             original_folder = [folder]
             original_ext = [', '.join(extensions)]
