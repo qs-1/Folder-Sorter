@@ -2,6 +2,7 @@ import sys
 from re import compile
 import customtkinter as ctk
 from PIL import Image
+from os import path
 from CTkToolTip import CTkToolTip
 
 from config_manager import (
@@ -694,7 +695,7 @@ def config_gui():
         extensions_label.pack(padx=7)
     
         # Sort the folder_extensions_mapping dictionary by keys (folder names)
-        sorted_folder_extensions = sorted(config['folder_extensions_mapping'].items())
+        sorted_folder_extensions = sorted(config['folder_extensions_mapping'].items(), key=lambda item: item[0].lower())
         # Populate the scrollable frame with labels and textboxes
         for folder, extensions in sorted_folder_extensions:
             # Frame for both folder name and extensions
