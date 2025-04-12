@@ -1,0 +1,5 @@
+customtkinter
+pystray
+Pillow
+CTkToolTip
+win11toast
