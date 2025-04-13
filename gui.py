@@ -3,6 +3,7 @@ from re import compile
 import customtkinter as ctk
 from PIL import Image
 from os import path
+from threading import Thread
 from CTkToolTip import CTkToolTip
 
 from config_manager import (
@@ -11,15 +12,17 @@ from config_manager import (
 )
 import file_sorter
 
-# Global references to prevent garbage collection
-app = None
-popup = None
-dialog = None
-path_entry = None
-tooltip = None
+# Global variables to hold references to main GUI elements and threads.
+# To allow different functions to access, modify, or check the state of these elements/threads. 
+app = None                     # Main configuration window (CTk)
+path_popup_window = None       # Transient popup window (ToplevelIco, child of app)
+standalone_popup_window = None # Standalone popup window (CTk, own thread)
+standalone_popup_thread = None # Thread for the standalone popup
+path_entry = None              # CTkEntry widget for updating selected folder path.
+tooltip = None                 # CTkToolTip instance for the path entry update
 
 class ToplevelIco(ctk.CTkToplevel):
-    """Custom CTkToplevel that fixes icon issues"""
+    """Custom CTkToplevel that fixes icon bug"""
     def __init__(self, master=None, icon_path=None):
         super().__init__(master)
         if icon_path:
@@ -53,11 +56,11 @@ def select_folder():
     if folder_path:
         save_config(folder_path=folder_path)
         
-        global popup
-        if popup:
+        global path_popup_window 
+        if path_popup_window:
             refresh_path_entry(folder_path)
-            popup.destroy()
-            popup = None
+            path_popup_window.destroy() 
+            path_popup_window = None    
         elif path_entry:
             refresh_path_entry(folder_path)
 
@@ -292,50 +295,88 @@ def prompt_user_for_existing_folder(folder_name):
 
     return user_response
 
-def show_popup(message):
-    """Show a popup message with a set button"""
-    global popup, app
-    
-    def setup_popup(popup, message):
-        def on_popup_quit():
-            global popup
-            popup.destroy()
-            popup = None
-
-        # Create font objects
+def _destroy_standalone_popup():
+    """Safely destroys the standalone popup window if it exists."""
+    global standalone_popup_window
+    if standalone_popup_window and standalone_popup_window.winfo_exists():
         try:
-            ctk_font_semibold_12 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12)
-            ctk_font_semibold_13 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=13)
+            # Schedule destroy on the popup's own mainloop
+            standalone_popup_window.after(0, standalone_popup_window.destroy)
         except Exception as e:
-            print(f"Error creating CTkFont objects: {e}")
-            sys.exit(1)
+            print(f"Error scheduling standalone popup destroy: {e}")
+    standalone_popup_window = None # reset global reference
 
-        popup.title("Path Not Set")
-        popup.geometry("350x130")
-        popup.resizable(False, False) 
-        popup.iconbitmap(APP_ICON)
-        popup.protocol("WM_DELETE_WINDOW", on_popup_quit)
-
-        label = ctk.CTkLabel(popup, text=message, font=ctk_font_semibold_13)
-        label.pack(pady=(20,15))
-        
-        set_button = ctk.CTkButton(popup, text="Set", width=50, font=ctk_font_semibold_12, command=select_folder)
-        set_button.pack(pady=10, anchor="center")
+def path_prompt_popup(message):
+    """Show a popup message with a 'Set' button
     
-    if app:
-        popup = ToplevelIco(app, APP_ICON)
-        setup_popup(popup, message)
-        popup.transient(app)  
-        popup.grab_set()   
-        popup.lift()
-        popup.focus_force()
-        app.wait_window(popup)
-    else:
-        popup = ctk.CTk()
-        setup_popup(popup, message)
-        popup.lift()
-        popup.focus_force()
-        popup.mainloop()
+    If the main configuration window 'app' exists, displays a Toplevel
+    window transient to 'app'. Otherwise, creates a new standalone CTk 
+    window running in its own thread.
+    """
+
+    # Import global variables to manage app and popup state
+    global app, path_popup_window, standalone_popup_window, standalone_popup_thread
+
+    def setup_popup(popup_instance, message):
+        def on_popup_quit():
+            # 'app' isnt running (standalone popup in its thread)
+            if popup_instance == standalone_popup_window:
+                _destroy_standalone_popup() # destroy the standalone popup from its own thread
+            else: 
+                # 'app' is running, destroy transient popup linked to it
+                global path_popup_window 
+                if popup_instance and popup_instance.winfo_exists():
+                    popup_instance.destroy()
+                path_popup_window = None 
+
+        popup_instance.title("Path Not Set")
+        popup_instance.geometry("350x130")
+        popup_instance.resizable(False, False)
+        popup_instance.iconbitmap(APP_ICON)
+        popup_instance.protocol("WM_DELETE_WINDOW", on_popup_quit)
+
+        label = ctk.CTkLabel(popup_instance, text=message, font=("Cascadia Code SemiBold", 13)) 
+        label.pack(pady=(20,15))
+        set_button = ctk.CTkButton(popup_instance, text="Set", width=50, font=("Cascadia Code SemiBold", 12), command=select_folder) 
+        set_button.pack(pady=10, anchor="center")
+
+    # If the main 'app' config GUI is running
+    if app and app.winfo_exists(): 
+        if path_popup_window and path_popup_window.winfo_exists(): # Prevent multiple popups  
+             path_popup_window.focus_force() 
+             return
+        path_popup_window = ToplevelIco(app, APP_ICON) 
+        setup_popup(path_popup_window, message) 
+        path_popup_window.transient(app) 
+        path_popup_window.grab_set() 
+        path_popup_window.lift() 
+        path_popup_window.focus_force() 
+
+    # If 'app' config GUI is not running (make standalone popup)
+    else: 
+        if standalone_popup_window and standalone_popup_window.winfo_exists(): # Prevent multiple popups
+            standalone_popup_window.focus_force()
+            return
+        if standalone_popup_thread and standalone_popup_thread.is_alive(): 
+            print("Standalone popup thread already running.")
+            return
+
+        def _standalone_popup_target():
+            global standalone_popup_window
+            try:
+                standalone_popup_window = ctk.CTk() 
+                setup_popup(standalone_popup_window, message)
+                standalone_popup_window.lift()
+                standalone_popup_window.focus_force()
+                standalone_popup_window.mainloop() # Mainloop in its own thread
+            finally:
+                # Ensure reset if mainloop exits unexpectedly
+                standalone_popup_window = None
+                print("Standalone popup closed.")
+
+        print("Starting standalone popup thread.")
+        standalone_popup_thread = Thread(target=_standalone_popup_target, daemon=True)
+        standalone_popup_thread.start()
 
 def validate_input(folder_name, extensions, original_folder=None):
     """Validate folder name and extensions"""
@@ -411,7 +452,6 @@ def focus_app():
 def config_gui():
     """Main configuration GUI"""
     # Load the configuration
-    from config_manager import load_config
     config_data = load_config()
 
     # Initialize the main application window
