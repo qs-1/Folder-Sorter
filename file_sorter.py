@@ -1,45 +1,34 @@
-import os
 from os import path, makedirs, listdir
 from shutil import move
 from threading import Thread
 from win11toast import toast
+from config_manager import load_config
 
-from config_manager import config, save_config
-
-# Global variable for error dialog function (will be set from GUI)
+# Global variables for GUI callbacks and app instance
+gui_app_instance = None
 show_error_dialog = None
-prompt_user_for_existing_folder = None
-render_scrollable_widget = None
 focus_app = None
 
-def set_gui_callbacks(error_dialog_func, prompt_folder_func, refresh_scrollable_func, focus_app_func):
+def set_gui_callbacks(app_instance, error_dialog_func, focus_app_func):
     """Set GUI callback functions needed by the file sorter"""
-    global show_error_dialog, prompt_user_for_existing_folder, render_scrollable_widget, focus_app
+    global gui_app_instance, show_error_dialog, focus_app
+    gui_app_instance = app_instance
     show_error_dialog = error_dialog_func
-    prompt_user_for_existing_folder = prompt_folder_func
-    render_scrollable_widget = refresh_scrollable_func
     focus_app = focus_app_func
 
-def ensure_unique_folder_names(config):
-    need_scrollable_refresh = False
-    folder_path = config['folder_path']
-    folder_extensions_mapping = config['folder_extensions_mapping']
-    updated_mapping = {}
-    for folder in folder_extensions_mapping.keys():
-        unique_folder = folder
-        if path.exists(path.join(folder_path, unique_folder)):
-            use_existing = prompt_user_for_existing_folder(folder)
-            if not use_existing:
-                base_folder = folder
-                counter = 1
-                while path.exists(path.join(folder_path, unique_folder)):
-                    unique_folder = f"{base_folder}_{counter}"
-                    counter += 1
-                if not need_scrollable_refresh: #if any folder name is changed, then refresh the scrollable widget
-                    need_scrollable_refresh = True
-        updated_mapping[unique_folder] = folder_extensions_mapping[folder]
-    save_config(config['folder_path'], updated_mapping)
-    return need_scrollable_refresh
+def _schedule_on_gui_thread(callback, *args):
+    """Safely schedules a function call on the GUI thread if possible."""
+    if gui_app_instance and gui_app_instance.winfo_exists():
+        try:
+            gui_app_instance.after(0, lambda cb=callback, a=args: cb(*a))
+            return True # Scheduled
+        except Exception as e:
+            print(f"Error scheduling GUI call: {e}")
+    else:
+        # Fallback or error handling if GUI isn't running
+        print(f"GUI not available to schedule call for {callback.__name__}")
+    return False # Not scheduled
+
 
 def generate_unique_filename(directory, filename):
     base, extension = path.splitext(filename)
@@ -54,9 +43,9 @@ def show_notification(folder_path):
     buttons = [
         {'activationType': 'protocol', 'arguments': f'file:///{folder_path}', 'content': 'Open Folder'}
     ]
-    
+
     if focus_app:
-        focus_app()
+        _schedule_on_gui_thread(focus_app) # Schedule focus_app call
 
     toast(
         'Folder Sorted',
@@ -67,59 +56,55 @@ def show_notification(folder_path):
     )
 
 def sort_files():
-    from config_manager import config, load_config
     config_data = load_config()
     folder_path = config_data.get('folder_path', '')
 
     # Check if the folder_path is valid
     if not folder_path or not path.exists(folder_path):
-        return "Folder path is not set or does not exist"
+        return "Folder path is not set or does not exist" 
 
-    # Check for existing folders only if the path is not in duplicates_checked_paths
-    # (meaning check only if current path hasn't been sorted by user before)
-    need_scrollable_refresh = False
-    if folder_path not in config_data['duplicates_checked_paths']:
-        need_scrollable_refresh = ensure_unique_folder_names(config_data)
-        save_config(duplicates_checked_path=folder_path)
+    folder_extensions_mapping = config_data.get('folder_extensions_mapping', {})
 
-    folder_extensions_mapping = config_data.get('folder_extensions_mapping', {}) # load after checking duplicates incase any change
+    files_moved = False # Flag to check if any file was actually moved
 
     for file in listdir(folder_path):
         file_path = path.join(folder_path, file)
         if not path.isfile(file_path):
             continue
-        
+
         # Check if file has an extension
         if '.' in file:
             file_extension = file.split('.')[-1]
             for folder, ext_list in folder_extensions_mapping.items():
                 if file_extension.lower() in ext_list:
                     target_folder_path = path.join(folder_path, folder)
+                    # --- This is the sufficient check ---
                     if not path.exists(target_folder_path):
-                        makedirs(target_folder_path)
-                    
+                        try:
+                            makedirs(target_folder_path)
+                        except Exception as e:
+                             if show_error_dialog:
+                                _schedule_on_gui_thread(show_error_dialog, f"Error creating folder '{target_folder_path}': {str(e)}")
+                             continue # Skip moving this file if folder creation failed
+
                     # Generate a unique filename if a file with the same name exists
                     target_file_path = path.join(target_folder_path, file)
                     if path.exists(target_file_path):
                         file = generate_unique_filename(target_folder_path, file)
                         target_file_path = path.join(target_folder_path, file)
-                    
+
                     try:
                         move(file_path, target_file_path)
+                        files_moved = True # Mark that at least one file was moved
                     except Exception as e:
                         if show_error_dialog:
-                            show_error_dialog(f"Error moving file '{file}': {str(e)}")
-                    break
+                            # Schedule show_error_dialog call
+                            _schedule_on_gui_thread(show_error_dialog, f"Error moving file '{file}': {str(e)}")
+                    break # Move to next file in listdir once matched
 
-    # Refresh UI if needed and if GUI is active
-    if need_scrollable_refresh and render_scrollable_widget:
-        try:
-            render_scrollable_widget()
-        except Exception:
-            pass
-    
-    # Show Windows notification
-    notification_thread = Thread(target=show_notification, args=(folder_path,))
-    notification_thread.start()
-    
-    return None  # No error message
+    # Show Windows notification only if files were actually moved
+    if files_moved:
+        notification_thread = Thread(target=show_notification, args=(folder_path,))
+        notification_thread.start()
+
+    return None  # No error message, sorting was successful or no files needed moving

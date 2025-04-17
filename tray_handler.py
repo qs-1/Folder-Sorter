@@ -1,4 +1,3 @@
-import time
 from threading import Thread
 from PIL import Image
 from config_manager import APP_ICON
@@ -25,10 +24,9 @@ def run_sort_files():
 def _config_gui_target():
     """Target function to run config_gui and manage gui.app state."""
     try:
-        gui.config_gui()
+        gui.launch_config_gui()
     finally:
         gui.app = None
-        print("Config GUI closed.")
 
 def open_config_gui():
     """Open the configuration GUI in a separate thread if not already open."""

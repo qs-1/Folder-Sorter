@@ -1,8 +1,10 @@
 """
+
 Folder Sorter - an application to sort files into categorized folders
 
-This module serves as the entry point for the application.
-It initializes the tray icon and manages the application lifetime.
+This module is the entry point for the application.
+It initializes the tray icon and manages the app.
+
 """
 
 import sys
