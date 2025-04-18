@@ -414,31 +414,44 @@ def validate_input(parent_window, folder_name, extensions, original_folder=None)
             if folder_name_lower == existing_folder_lower and existing_folder_lower != original_folder_lower:
                 return False, f"Folder name '{folder_name_stripped}' already exists in the configuration (used by '{existing_folder}')."
 
-    cleaned_extensions = []
+    # --- Extension validation ---
+    cleaned_extensions = [] # Keep track for cross-category check
+
     for ext in extensions:
         ext_stripped = ext.strip().lstrip('.')
-        if not ext_stripped: continue
+        if not ext_stripped: continue # Skip empty entries
 
+        # Basic character validation
         if invalid_extension_chars_pattern.search(ext_stripped):
             return False, f"Extension '{ext_stripped}' contains invalid characters (\\/:*?\"<>|)."
         if ext_stripped.upper() in reserved_names:
             return False, f"Extension '{ext_stripped}' is a reserved name."
 
         ext_lower = ext_stripped.lower()
+
+        # <<< REMOVED: Check for duplicates within the list being submitted >>>
+        # if ext_lower in seen_extensions_in_current_list:
+        #     return False, f"Extension '{ext_stripped}' is listed multiple times for this category."
+        # seen_extensions_in_current_list.add(ext_lower)
+
+        # Check against other existing categories
         for existing_folder, existing_extensions in mapping.items():
             existing_folder_lower = existing_folder.lower()
             existing_extensions_lower = [e.lower().lstrip('.') for e in existing_extensions]
 
-            if original_folder is None:
-                if ext_lower in existing_extensions_lower:
-                    return False, f"Extension '{ext_stripped}' is already assigned to folder '{existing_folder}'."
-            else:
-                original_folder_lower = original_folder[0].lower()
-                if existing_folder_lower != original_folder_lower and existing_folder_lower != folder_name_lower and ext_lower in existing_extensions_lower:
-                     return False, f"Extension '{ext_stripped}' is already assigned to folder '{existing_folder}'."
-        cleaned_extensions.append(ext_stripped)
+            is_adding = original_folder is None
+            is_editing_different_category = not is_adding and existing_folder_lower != original_folder[0].lower()
 
-    return True, ""
+            if (is_adding or is_editing_different_category) and ext_lower in existing_extensions_lower:
+                 return False, f"Extension '{ext_stripped}' is already assigned to folder '{existing_folder}'."
+
+        cleaned_extensions.append(ext_stripped) # Add for cross-category check
+
+    # Check if at least one valid extension was provided
+    if not cleaned_extensions:
+        return False, "At least one valid extension is required."
+
+    return True, "" # Validation passed
 # endregion
 
 
@@ -522,21 +535,27 @@ class CategoryRow(ctk.CTkFrame):
         """Save changes to folder name and extensions"""
         new_folder_name = self.folder_entry_var.get().strip()
         new_extensions_str = self.extensions_textbox.get("1.0", "end-1c").strip()
-        new_extensions_list = [ext.strip().replace(' ', '').lower() for ext in new_extensions_str.split(',') if ext.strip()]
+        # Process extensions: split, strip, lowercase, remove empty, ensure uniqueness
+        raw_extensions = [ext.strip().lstrip('.').lower() for ext in new_extensions_str.split(',') if ext.strip()]
+        unique_extensions_list = sorted(list(set(raw_extensions))) # <<< Deduplicate and sort
 
-        is_valid, error_message = validate_input(self.config_window, new_folder_name, new_extensions_list, original_folder=(self.original_folder,))
-        if is_valid is None: return
+        # Pass the raw list (including potential duplicates) to validation
+        # Validation will check against *other* folders but ignore self-duplicates
+        is_valid, error_message = validate_input(self.config_window, new_folder_name, raw_extensions, original_folder=(self.original_folder,))
+        if is_valid is None: return # User cancelled dialog
         if not is_valid:
             show_error_dialog(self.config_window, error_message)
             return
 
         config_data = load_config()
         config_data['folder_extensions_mapping'].pop(self.original_folder, None)
-        config_data['folder_extensions_mapping'][new_folder_name] = new_extensions_list
+        # <<< Save the unique, sorted list >>>
+        config_data['folder_extensions_mapping'][new_folder_name] = unique_extensions_list
         save_config(folder_extensions_mapping=config_data['folder_extensions_mapping'])
 
         self.original_folder = new_folder_name
-        self.original_extensions_str = ', '.join(new_extensions_list)
+        # <<< Update original_extensions_str with the unique, sorted list >>>
+        self.original_extensions_str = ', '.join(unique_extensions_list)
 
         self.extensions_textbox.delete("1.0", "end")
         self.extensions_textbox.insert("1.0", self.original_extensions_str)
@@ -717,21 +736,25 @@ class ConfigWindow(ctk.CTk):
 
         add_button = ctk.CTkButton(add_frame, text="Add", width=6, font=self.fonts['regular_12'], command=self.add_category)
         add_button.grid(row=2, column=1, sticky="e", padx=6, pady=(0,7))
-
+        
     def add_category(self):
         """Adds a new category from the input fields."""
         folder_name = self.new_category_entry.get().strip()
         extensions_input = self.new_extensions_entry.get().strip()
-        extensions = [ext.strip().replace(' ', '').lower() for ext in extensions_input.split(',') if ext.strip()]
+        # Process extensions: split, strip, lowercase, remove empty, ensure uniqueness
+        raw_extensions = [ext.strip().lstrip('.').lower() for ext in extensions_input.split(',') if ext.strip()]
+        unique_extensions_list = sorted(list(set(raw_extensions))) # <<< Deduplicate and sort
 
-        is_valid, error_message = validate_input(self, folder_name, extensions)
-        if is_valid is None: return
+        # Pass the raw list (including potential duplicates) to validation
+        is_valid, error_message = validate_input(self, folder_name, raw_extensions)
+        if is_valid is None: return # User cancelled dialog
         if not is_valid:
             show_error_dialog(self, error_message)
             return
 
         config_data = load_config()
-        config_data['folder_extensions_mapping'][folder_name] = extensions
+        # <<< Save the unique, sorted list >>>
+        config_data['folder_extensions_mapping'][folder_name] = unique_extensions_list
         save_config(folder_extensions_mapping=config_data['folder_extensions_mapping'])
 
         self.render_scrollable_widget()
