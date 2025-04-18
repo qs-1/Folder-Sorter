@@ -763,8 +763,11 @@ class ConfigWindow(ctk.CTk):
                 return True
         return False
 
-    def save_all_changes(self):
+    def save_all_changes(self, render_on_success=True):
         """Attempts to save changes in all dirty CategoryRow widgets.
+        Args:
+            render_on_success (bool): If True, re-renders the scrollable widget
+                                      if any changes were successfully saved.
         Returns:
             True if all saves were successful.
             False if the user cancelled a sub-dialog during the save process.
@@ -797,8 +800,9 @@ class ConfigWindow(ctk.CTk):
             print("Save operation cancelled by user in a sub-dialog.")
             return False # Indicate cancellation occurred
 
-        # Only re-render if no errors/cancellations stopped us AND some rows were actually saved
-        if rows_to_rerender:
+        # Only re-render if no errors/cancellations stopped us,
+        # some rows were actually saved, AND we are asked to render on success
+        if rows_to_rerender and render_on_success: 
             self.render_scrollable_widget()
 
         return True # All dirty rows were processed successfully without errors or cancellations
@@ -808,11 +812,12 @@ class ConfigWindow(ctk.CTk):
         if self.has_unsaved_changes():
             result = show_unsaved_changes_dialog(self)
             if result == "save":
-                save_outcome = self.save_all_changes()
+                # Call save_all_changes, but tell it not to re-render ui on success
+                save_outcome = self.save_all_changes(render_on_success=False)
 
                 if save_outcome is True:
                     # All changes saved successfully
-                    self._perform_quit()
+                    self._perform_quit() # Proceed to quit immediately
                 elif isinstance(save_outcome, str):
                     # A validation error occurred, show the specific message
                     show_error_dialog(self, f"Failed to save changes:\n\n{save_outcome}")
