@@ -168,8 +168,10 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
     parent_window.wait_window(dialog)
 
     return dialog.result
+# endregion
 
 
+# region del row confirmation
 def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
     """Shows a confirmation dialog for deleting a category."""
     if not parent_window or not parent_window.winfo_exists():
@@ -256,6 +258,82 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
     dialog.lift()
     dialog.focus_force()
     parent_window.wait_window(dialog)
+# endregion
+
+
+# region unsaved exit popup
+def show_unsaved_changes_dialog(parent_window):
+    """Shows a confirmation dialog for unsaved changes."""
+    if not parent_window or not parent_window.winfo_exists():
+        print("Error: show_unsaved_changes_dialog called with invalid parent window.")
+        return "cancel" # Default to cancel if parent is invalid
+
+    dialog = ToplevelIco(parent_window, APP_ICON)
+    dialog.title("Unsaved Changes")
+    dialog.result = "cancel" # Default result if 'X' is clicked
+
+    try:
+        font_semibold_12 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12)
+        font_semibold_14 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=14)
+    except Exception as e:
+        print(f"Error creating CTkFont objects: {e}")
+        font_semibold_12 = ("Arial", 12, "bold")
+        font_semibold_14 = ("Arial", 14, "bold")
+
+    dialog.geometry("330x140")
+    dialog.minsize(330, 140)
+    dialog.resizable(False, False)
+    dialog.center_window()
+
+
+    label = ctk.CTkLabel(dialog,
+                        text="You have unsaved changes. What would you like to do?",
+                        font=font_semibold_14,
+                        wraplength=330)
+    label.pack(pady=(25, 15), padx=(16,10))
+
+    button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    button_frame.pack(pady=(18,0), fill='x')
+
+    # --- Button Definitions ---
+    def on_save():
+        dialog.result = "save"
+        dialog.destroy()
+
+    def on_discard():
+        dialog.result = "discard"
+        dialog.destroy()
+
+    def on_cancel(): # Treat 'X' as Cancel
+        dialog.result = "cancel"
+        dialog.destroy()
+
+
+    save_button = ctk.CTkButton(button_frame,
+                                text="Save",
+                                width=80,
+                                font=font_semibold_12,
+                                command=on_save)
+    save_button.pack(side="left", padx=(100, 0), pady=10)
+
+    discard_button = ctk.CTkButton(button_frame,
+                                   text="Discard",
+                                   width=80,
+                                   fg_color="#B04848",
+                                   hover_color="#8E3B3B",
+                                   font=font_semibold_12,
+                                   command=on_discard)
+    discard_button.pack(side="right", padx=(0, 100), pady=10)
+
+    dialog.protocol("WM_DELETE_WINDOW", on_cancel) # Treat 'X' as Cancel
+
+    dialog.transient(parent_window)
+    dialog.grab_set()
+    dialog.lift()
+    dialog.focus_force()
+    parent_window.wait_window(dialog)
+
+    return dialog.result
 # endregion
 
 
@@ -429,11 +507,6 @@ def validate_input(parent_window, folder_name, extensions, original_folder=None)
 
         ext_lower = ext_stripped.lower()
 
-        # <<< REMOVED: Check for duplicates within the list being submitted >>>
-        # if ext_lower in seen_extensions_in_current_list:
-        #     return False, f"Extension '{ext_stripped}' is listed multiple times for this category."
-        # seen_extensions_in_current_list.add(ext_lower)
-
         # Check against other existing categories
         for existing_folder, existing_extensions in mapping.items():
             existing_folder_lower = existing_folder.lower()
@@ -466,6 +539,7 @@ class CategoryRow(ctk.CTkFrame):
         self.original_extensions_str = ', '.join(extensions)
         self.fonts = fonts
         self.delete_icon = delete_icon
+        self.is_dirty = False # to track unsaved changes
 
         label_frame = ctk.CTkFrame(self, corner_radius=10, width=200, height=40)
         label_frame.pack_propagate(False)
@@ -505,12 +579,20 @@ class CategoryRow(ctk.CTkFrame):
         self.extensions_textbox.bind("<KeyRelease>", self._on_textbox_change)
 
     def _handle_change(self, is_changed):
-        """Handle UI changes when field values change"""
+        """Handle UI changes when field values change.
+
+        This method updates the visibility of the Save, Reset, and Remove buttons
+        based on whether the folder name or extensions have been modified from
+        their original saved state. It also sets the `is_dirty` flag which is
+        used to track unsaved changes when closing the configuration window."""
+        self.is_dirty = is_changed # Update dirty state
         if is_changed:
+            # Show Save and Reset buttons, hide Remove button
             self.save_button.pack(side="left", padx=2, pady=5)
             self.remove_button.place_forget()
             self.reset_button.pack(side="right", padx=2, pady=5)
         else:
+            # Hide Save and Reset buttons, show Remove button
             self.save_button.pack_forget()
             self.reset_button.pack_forget()
             self.remove_button.place(relx=0.5, rely=0.5, anchor="center")
@@ -519,17 +601,19 @@ class CategoryRow(ctk.CTkFrame):
         """Handle folder name entry changes"""
         new_folder_name = self.folder_entry_var.get().strip()
         current_extensions = self.extensions_textbox.get("1.0", "end-1c").strip()
+        # Check if current values differ from the last saved state
         is_changed = (new_folder_name != self.original_folder or
                       current_extensions != self.original_extensions_str)
-        self._handle_change(is_changed)
+        self._handle_change(is_changed) # Update UI based on change status
 
     def _on_textbox_change(self, event=None):
         """Handle extensions textbox changes"""
         current_folder = self.folder_entry_var.get().strip()
         new_ext = self.extensions_textbox.get("1.0", "end-1c").strip()
+        # Check if current values differ from the last saved state
         is_changed = (current_folder != self.original_folder or
                       new_ext != self.original_extensions_str)
-        self._handle_change(is_changed)
+        self._handle_change(is_changed) # Update UI
 
     def save_entry_changes(self):
         """Save changes to folder name and extensions"""
@@ -537,39 +621,40 @@ class CategoryRow(ctk.CTkFrame):
         new_extensions_str = self.extensions_textbox.get("1.0", "end-1c").strip()
         # Process extensions: split, strip, lowercase, remove empty, ensure uniqueness
         raw_extensions = [ext.strip().lstrip('.').lower() for ext in new_extensions_str.split(',') if ext.strip()]
-        unique_extensions_list = sorted(list(set(raw_extensions))) # <<< Deduplicate and sort
+        unique_extensions_list = sorted(list(set(raw_extensions))) # Deduplicate and sort
 
         # Pass the raw list (including potential duplicates) to validation
         # Validation will check against *other* folders but ignore self-duplicates
         is_valid, error_message = validate_input(self.config_window, new_folder_name, raw_extensions, original_folder=(self.original_folder,))
-        if is_valid is None: return # User cancelled dialog
+        if is_valid is None: 
+            return False # Return False on cancel
         if not is_valid:
             show_error_dialog(self.config_window, error_message)
-            return
+            return False # Return False on validation error
 
         config_data = load_config()
         config_data['folder_extensions_mapping'].pop(self.original_folder, None)
-        # <<< Save the unique, sorted list >>>
+        # Save the unique, sorted list 
         config_data['folder_extensions_mapping'][new_folder_name] = unique_extensions_list
         save_config(folder_extensions_mapping=config_data['folder_extensions_mapping'])
 
         self.original_folder = new_folder_name
-        # <<< Update original_extensions_str with the unique, sorted list >>>
+        # Update original_extensions_str with the new exts
         self.original_extensions_str = ', '.join(unique_extensions_list)
 
         self.extensions_textbox.delete("1.0", "end")
         self.extensions_textbox.insert("1.0", self.original_extensions_str)
 
-        self._handle_change(False)
+        self._handle_change(False) # This sets is_dirty to False
 
-        self.config_window.render_scrollable_widget()
+        return True # Return True on validation success
 
     def reset_fields(self):
         """Resets the fields to their original values."""
         self.folder_entry_var.set(self.original_folder)
         self.extensions_textbox.delete("1.0", "end")
         self.extensions_textbox.insert("1.0", self.original_extensions_str)
-        self._handle_change(False)
+        self._handle_change(False) # sets is_dirty to False
 
     def delete_category(self):
         """Delete this category."""
@@ -623,7 +708,7 @@ class ConfigWindow(ctk.CTk):
         self.geometry("547x700")
         self.iconbitmap(APP_ICON)
         self.resizable(False, True)
-        self.protocol("WM_DELETE_WINDOW", self.on_app_quit)
+        self.protocol("WM_DELETE_WINDOW", self.on_app_quit) # Ensure this is set
 
         try:
             self.fonts = {
@@ -658,11 +743,63 @@ class ConfigWindow(ctk.CTk):
         self.lift()
         self.focus_app()
 
+    def get_category_rows(self):
+        """Returns a list of all CategoryRow widgets."""
+        return [widget for widget in self.scrollable_frame.winfo_children()
+                if isinstance(widget, CategoryRow)]
+
+    def has_unsaved_changes(self):
+        """Checks if any CategoryRow has unsaved changes."""
+        for row in self.get_category_rows():
+            if row.is_dirty:
+                return True
+        return False
+
+    def save_all_changes(self):
+        """Attempts to save changes in all dirty CategoryRow widgets."""
+        all_saved = True
+        rows_to_rerender = False
+        for row in self.get_category_rows():
+            if row.is_dirty:
+                if row.save_entry_changes():
+                    rows_to_rerender = True
+                else:
+                    all_saved = False
+                    print(f"Failed to save changes for: {row.folder_entry_var.get()}")
+
+        if rows_to_rerender:
+            self.render_scrollable_widget()
+
+        return all_saved
 
     def on_app_quit(self):
+        """Handles the application quit event, checking for unsaved changes."""
+        if self.has_unsaved_changes():
+            result = show_unsaved_changes_dialog(self)
+            if result == "save":
+                if self.save_all_changes():
+                    self._perform_quit()
+                else:
+                    show_error_dialog(self, "Failed to save some changes. Please review and try again.")
+                    return
+            elif result == "discard":
+                self._perform_quit()
+            elif result == "cancel":
+                return
+        else:
+            self._perform_quit()
+
+    def _perform_quit(self):
+        """Actually destroys the window and cleans up."""
         global app
         if app is self:
             app = None
+        global standalone_popup_thread, standalone_popup_window
+        if standalone_popup_window and standalone_popup_window.winfo_exists():
+            standalone_popup_window.destroy()
+            standalone_popup_window = None
+        if standalone_popup_thread and standalone_popup_thread.is_alive():
+            print("Note: Standalone popup thread might still be running.")
         self.destroy()
         print("Config GUI closed.")
 
@@ -741,19 +878,16 @@ class ConfigWindow(ctk.CTk):
         """Adds a new category from the input fields."""
         folder_name = self.new_category_entry.get().strip()
         extensions_input = self.new_extensions_entry.get().strip()
-        # Process extensions: split, strip, lowercase, remove empty, ensure uniqueness
         raw_extensions = [ext.strip().lstrip('.').lower() for ext in extensions_input.split(',') if ext.strip()]
-        unique_extensions_list = sorted(list(set(raw_extensions))) # <<< Deduplicate and sort
+        unique_extensions_list = sorted(list(set(raw_extensions)))
 
-        # Pass the raw list (including potential duplicates) to validation
         is_valid, error_message = validate_input(self, folder_name, raw_extensions)
-        if is_valid is None: return # User cancelled dialog
+        if is_valid is None: return
         if not is_valid:
             show_error_dialog(self, error_message)
             return
 
         config_data = load_config()
-        # <<< Save the unique, sorted list >>>
         config_data['folder_extensions_mapping'][folder_name] = unique_extensions_list
         save_config(folder_extensions_mapping=config_data['folder_extensions_mapping'])
 
