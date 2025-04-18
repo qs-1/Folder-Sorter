@@ -528,6 +528,24 @@ def validate_input(parent_window, folder_name, extensions, original_folder=None)
 # endregion
 
 
+# region helper functions
+def process_extensions_string(extensions_str):
+    """
+    Takes a comma-separated string of extensions, cleans them,
+    removes duplicates while preserving the order of the first occurrence.
+    Returns a list of unique, cleaned extensions in order.
+    """
+    raw_extensions_list = [ext.strip().lstrip('.').lower() for ext in extensions_str.split(',') if ext.strip()]
+    seen_extensions = set()
+    ordered_unique_extensions = []
+    for ext in raw_extensions_list:
+        if ext not in seen_extensions:
+            ordered_unique_extensions.append(ext)
+            seen_extensions.add(ext)
+    return ordered_unique_extensions
+# endregion
+
+
 # region CategoryRow
 class CategoryRow(ctk.CTkFrame):
     def __init__(self, master, config_window, folder_name, extensions, fonts, delete_icon):
@@ -623,39 +641,36 @@ class CategoryRow(ctk.CTkFrame):
         # If save_result is True (success) or False (user cancelled sub-dialog), do nothing further here.
 
     def save_entry_changes(self):
-        """Save changes to folder name and extensions.
-        Returns:
-            True: If save was successful.
-            False: If user cancelled a sub-dialog (e.g., folder exists).
-            str: The specific error message if validation failed.
-        """
+        """Save changes to folder name and extensions, preserving order."""
         new_folder_name = self.folder_entry_var.get().strip()
         new_extensions_str = self.extensions_textbox.get("1.0", "end-1c").strip()
-        raw_extensions = [ext.strip().lstrip('.').lower() for ext in new_extensions_str.split(',') if ext.strip()]
-        unique_extensions_list = sorted(list(set(raw_extensions)))
 
-        is_valid, error_message = validate_input(self.config_window, new_folder_name, raw_extensions, original_folder=(self.original_folder,))
+        # Use the helper function
+        ordered_unique_extensions = process_extensions_string(new_extensions_str)
+
+        # Use ordered_unique_extensions for validation
+        is_valid, error_message = validate_input(self.config_window, new_folder_name, ordered_unique_extensions, original_folder=(self.original_folder,))
 
         if is_valid is None:
-            return False # Return False on user cancel in validate_input's dialog
+            return False
         if not is_valid:
-            return error_message # return the error message string
+            return error_message
 
         # --- Save logic ---
         config_data = load_config()
         config_data['folder_extensions_mapping'].pop(self.original_folder, None)
-        config_data['folder_extensions_mapping'][new_folder_name] = unique_extensions_list
+        config_data['folder_extensions_mapping'][new_folder_name] = ordered_unique_extensions
         save_config(folder_extensions_mapping=config_data['folder_extensions_mapping'])
 
         self.original_folder = new_folder_name
-        self.original_extensions_str = ', '.join(unique_extensions_list)
+        self.original_extensions_str = ', '.join(ordered_unique_extensions)
 
         self.extensions_textbox.delete("1.0", "end")
         self.extensions_textbox.insert("1.0", self.original_extensions_str)
 
         self._handle_change(False)
 
-        return True # Return True on successful validation and save
+        return True
 
     def reset_fields(self):
         """Resets the fields to their original values."""
@@ -921,22 +936,24 @@ class ConfigWindow(ctk.CTk):
 
         add_button = ctk.CTkButton(add_frame, text="Add", width=6, font=self.fonts['regular_12'], command=self.add_category)
         add_button.grid(row=2, column=1, sticky="e", padx=6, pady=(0,7))
-        
+
     def add_category(self):
-        """Adds a new category from the input fields."""
+        """Adds a new category from the input fields, preserving extension order."""
         folder_name = self.new_category_entry.get().strip()
         extensions_input = self.new_extensions_entry.get().strip()
-        raw_extensions = [ext.strip().lstrip('.').lower() for ext in extensions_input.split(',') if ext.strip()]
-        unique_extensions_list = sorted(list(set(raw_extensions)))
 
-        is_valid, error_message = validate_input(self, folder_name, raw_extensions)
+        # Use the helper function
+        ordered_unique_extensions = process_extensions_string(extensions_input)
+
+        # Use ordered_unique_extensions for validation
+        is_valid, error_message = validate_input(self, folder_name, ordered_unique_extensions)
         if is_valid is None: return
         if not is_valid:
             show_error_dialog(self, error_message)
             return
 
         config_data = load_config()
-        config_data['folder_extensions_mapping'][folder_name] = unique_extensions_list
+        config_data['folder_extensions_mapping'][folder_name] = ordered_unique_extensions
         save_config(folder_extensions_mapping=config_data['folder_extensions_mapping'])
 
         self.render_scrollable_widget()
