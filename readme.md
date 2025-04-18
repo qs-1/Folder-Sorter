@@ -5,13 +5,13 @@ A Windows system tray app to automatically sort files into categorized subfolder
 **Note:** Currently Windows only due to `win11toast` notifications. Support for macOS and Linux soon.
 
 <div align="center">
-  <a href="https://ibb.co/zTTbFYQB"><img src="https://i.ibb.co/hJJHcjL4/Folder-Sorter-demo.png" alt="Folder-Sorter-demo" border="0" width="549"></a>
+  <a href="https://github.com/user-attachments/assets/afad11f3-0050-444c-8eb7-4bf614db6e1b"><img src="https://github.com/user-attachments/assets/afad11f3-0050-444c-8eb7-4bf614db6e1b" alt="Folder-Sorter-demo" border="0" width="549"></a>
 </div>
 
 <div align="center">
-  <a href="https://imgbb.com/"><img src="https://i.ibb.co/ksSNnf80/Tray.png" alt="Tray Icon" border="0" height="118"></a>
+  <a href="https://github.com/user-attachments/assets/248fff3b-3f66-408d-bad9-1c8b8a89fc76"><img src="https://github.com/user-attachments/assets/248fff3b-3f66-408d-bad9-1c8b8a89fc76" border="0" height="118"></a>
   &nbsp;&nbsp;&nbsp;
-  <a href="https://imgbb.com/"><img src="https://i.ibb.co/FLSnshNQ/Tray-options.png" alt="Tray Menu Options" border="0" height="127"></a>
+  <a href="https://github.com/user-attachments/assets/6fc29ed1-7d09-46b4-9c7a-132d0e0c1c3d"><img src="https://github.com/user-attachments/assets/6fc29ed1-7d09-46b4-9c7a-132d0e0c1c3d" alt="Tray Menu Options" border="0" height="127"></a>
 </div>
 
 ## Features
