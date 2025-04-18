@@ -567,7 +567,7 @@ class CategoryRow(ctk.CTkFrame):
 
         self.save_button = ctk.CTkButton(self.button_frame, text="Save", width=30, height=25, fg_color="#343638",
                                          hover_color='#253417', text_color='#94be6b', font=self.fonts['regular_9'],
-                                         command=self.save_entry_changes)
+                                         command=self._handle_save_button_click)
         self.save_button.pack_forget()
 
         self.reset_button = ctk.CTkButton(self.button_frame, text="Reset", width=30, height=25, fg_color="#343638",
@@ -615,39 +615,47 @@ class CategoryRow(ctk.CTkFrame):
                       new_ext != self.original_extensions_str)
         self._handle_change(is_changed) # Update UI
 
+    def _handle_save_button_click(self):
+        """Handles the click of the row's save button, showing errors if necessary."""
+        save_result = self.save_entry_changes()
+        if isinstance(save_result, str): # Check if validation returned an error message
+            show_error_dialog(self.config_window, save_result)
+        # If save_result is True (success) or False (user cancelled sub-dialog), do nothing further here.
+
     def save_entry_changes(self):
-        """Save changes to folder name and extensions"""
+        """Save changes to folder name and extensions.
+        Returns:
+            True: If save was successful.
+            False: If user cancelled a sub-dialog (e.g., folder exists).
+            str: The specific error message if validation failed.
+        """
         new_folder_name = self.folder_entry_var.get().strip()
         new_extensions_str = self.extensions_textbox.get("1.0", "end-1c").strip()
-        # Process extensions: split, strip, lowercase, remove empty, ensure uniqueness
         raw_extensions = [ext.strip().lstrip('.').lower() for ext in new_extensions_str.split(',') if ext.strip()]
-        unique_extensions_list = sorted(list(set(raw_extensions))) # Deduplicate and sort
+        unique_extensions_list = sorted(list(set(raw_extensions)))
 
-        # Pass the raw list (including potential duplicates) to validation
-        # Validation will check against *other* folders but ignore self-duplicates
         is_valid, error_message = validate_input(self.config_window, new_folder_name, raw_extensions, original_folder=(self.original_folder,))
-        if is_valid is None: 
-            return False # Return False on cancel
-        if not is_valid:
-            show_error_dialog(self.config_window, error_message)
-            return False # Return False on validation error
 
+        if is_valid is None:
+            return False # Return False on user cancel in validate_input's dialog
+        if not is_valid:
+            return error_message # return the error message string
+
+        # --- Save logic ---
         config_data = load_config()
         config_data['folder_extensions_mapping'].pop(self.original_folder, None)
-        # Save the unique, sorted list 
         config_data['folder_extensions_mapping'][new_folder_name] = unique_extensions_list
         save_config(folder_extensions_mapping=config_data['folder_extensions_mapping'])
 
         self.original_folder = new_folder_name
-        # Update original_extensions_str with the new exts
         self.original_extensions_str = ', '.join(unique_extensions_list)
 
         self.extensions_textbox.delete("1.0", "end")
         self.extensions_textbox.insert("1.0", self.original_extensions_str)
 
-        self._handle_change(False) # This sets is_dirty to False
+        self._handle_change(False)
 
-        return True # Return True on validation success
+        return True # Return True on successful validation and save
 
     def reset_fields(self):
         """Resets the fields to their original values."""
@@ -756,37 +764,72 @@ class ConfigWindow(ctk.CTk):
         return False
 
     def save_all_changes(self):
-        """Attempts to save changes in all dirty CategoryRow widgets."""
-        all_saved = True
+        """Attempts to save changes in all dirty CategoryRow widgets.
+        Returns:
+            True if all saves were successful.
+            False if the user cancelled a sub-dialog during the save process.
+            str: The error message from the first validation failure encountered.
+        """
         rows_to_rerender = False
-        for row in self.get_category_rows():
-            if row.is_dirty:
-                if row.save_entry_changes():
-                    rows_to_rerender = True
-                else:
-                    all_saved = False
-                    print(f"Failed to save changes for: {row.folder_entry_var.get()}")
+        first_error = None
+        user_cancelled = False
 
+        # Create a list to avoid issues if render_scrollable_widget modifies the children during iteration
+        rows_to_process = self.get_category_rows()
+
+        for row in rows_to_process:
+            if row.is_dirty:
+                save_result = row.save_entry_changes()
+
+                if isinstance(save_result, str): # Validation error occurred
+                    first_error = save_result
+                    break # Stop processing on the first error
+                elif save_result is False: # User cancellation in a sub-dialog
+                    user_cancelled = True
+                    break # Stop processing on cancellation
+                elif save_result is True: # Successful save for this row
+                    rows_to_rerender = True
+
+        if first_error:
+            return first_error # Return the specific validation error message
+
+        if user_cancelled:
+            print("Save operation cancelled by user in a sub-dialog.")
+            return False # Indicate cancellation occurred
+
+        # Only re-render if no errors/cancellations stopped us AND some rows were actually saved
         if rows_to_rerender:
             self.render_scrollable_widget()
 
-        return all_saved
+        return True # All dirty rows were processed successfully without errors or cancellations
 
     def on_app_quit(self):
         """Handles the application quit event, checking for unsaved changes."""
         if self.has_unsaved_changes():
             result = show_unsaved_changes_dialog(self)
             if result == "save":
-                if self.save_all_changes():
+                save_outcome = self.save_all_changes()
+
+                if save_outcome is True:
+                    # All changes saved successfully
                     self._perform_quit()
-                else:
-                    show_error_dialog(self, "Failed to save some changes. Please review and try again.")
+                elif isinstance(save_outcome, str):
+                    # A validation error occurred, show the specific message
+                    show_error_dialog(self, f"Failed to save changes:\n\n{save_outcome}")
+                    # Do not quit, allow the user to fix the error
                     return
+                elif save_outcome is False:
+                    # User cancelled a sub-dialog during save_all_changes
+                    # No error message needed, just don't quit
+                    return
+
             elif result == "discard":
                 self._perform_quit()
             elif result == "cancel":
+                # User cancelled the unsaved changes dialog
                 return
         else:
+            # No unsaved changes
             self._perform_quit()
 
     def _perform_quit(self):
