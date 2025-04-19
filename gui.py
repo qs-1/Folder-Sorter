@@ -1,4 +1,15 @@
 import sys
+import ctypes
+import platform 
+
+# initial blurryness fix for Windows
+if platform.system() == "Windows": 
+    try:                         
+        import ctypes            
+        ctypes.windll.shcore.SetProcessDpiAwareness(1) 
+    except Exception as e:       
+        print(f"Note: Failed to set DPI awareness - {e}") 
+
 from re import compile
 import customtkinter as ctk
 from PIL import Image
@@ -18,20 +29,100 @@ path_popup_window = None       # Transient popup window (ToplevelIco, child)
 standalone_popup_window = None # Standalone popup window (CTk, own thread)
 standalone_popup_thread = None # Thread for the standalone popup
 
+
+# region custom CTkToplevel
 class ToplevelIco(ctk.CTkToplevel):
     """Custom CTkToplevel that fixes icon updation bug"""
     def __init__(self, master=None, icon_path=None):
         super().__init__(master)
+        # Store initial master dimensions if available (assuming master is ConfigWindow)
+        if hasattr(master, 'initial_width') and hasattr(master, 'initial_height'):
+            self.master_initial_width = master.initial_width
+            self.master_initial_height = master.initial_height
+        else:
+            self.master_initial_width = None
+            self.master_initial_height = None
+
         if icon_path:
             self.after(201, lambda: self.iconbitmap(icon_path))
 
     def center_window(self):
-        self.update_idletasks()
-        width = self.winfo_width()
-        height = self.winfo_height()
-        x = (self.master.winfo_x() + self.master.winfo_width() // 2) - (width // 2)
-        y = (self.master.winfo_y() + self.master.winfo_height() // 2) - (height // 2)
-        self.geometry(f'{width}x{height}+{x}+{y}')
+        self.update_idletasks() # Ensure dialog measurements are up-to-date
+
+        # Get Dialog's size
+        dialog_width = self.winfo_reqwidth()
+        dialog_height = self.winfo_reqheight()
+
+
+        if not self.master or not self.master.winfo_exists():
+            print("Error: Cannot center dialog, master window invalid.")
+            # Fallback: center on screen? Or just place at default?
+            # Centering on screen for now as a basic fallback
+            screen_width = self.winfo_screenwidth()
+            screen_height = self.winfo_screenheight()
+            x = (screen_width // 2) - (dialog_width // 2) 
+            y = (screen_height // 2) - (dialog_height // 2)
+            self.geometry(f'{dialog_width}x{dialog_height}+{x}+{y}')
+            return
+
+        try:
+            # --- Get Scaling Factor ---
+            scale_factor = 1.0
+            try:
+                # Try getting scaling factor from the master window first
+                self.master.update_idletasks() # Ensure master handle is ready
+                scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(self.master.winfo_id())
+            except Exception as e_ctk:
+                if platform.system() == "Windows":
+                    try:
+                        scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
+                    except Exception as e_ctypes:
+                        scale_factor = 1.0
+                else:
+                     scale_factor = 1.0
+
+            # --- Master Geometry ---
+            master_x = self.master.winfo_x()
+            master_y = self.master.winfo_y()
+
+            # Use stored initial logical size if available, otherwise fallback
+            if self.master_initial_width is not None and self.master_initial_height is not None:
+                master_logical_width = self.master_initial_width
+                master_logical_height = self.master_initial_height
+            else:
+                # Fallback, Get current size
+                master_logical_width = self.master.winfo_width()
+                master_logical_height = self.master.winfo_height()
+
+            # Calculate sizes and center
+            master_actual_width = int(master_logical_width * scale_factor)
+            master_actual_height = int(master_logical_height * scale_factor)
+            dialog_actual_width = int(dialog_width * scale_factor)
+            dialog_actual_height = int(dialog_height * scale_factor)
+
+            # Calculate master's center
+            physical_master_center_x = master_x + (master_actual_width // 2)
+            physical_master_center_y = master_y + (master_actual_height // 2)
+
+            # Calculate dialog's top-left
+            x = physical_master_center_x - (dialog_actual_width // 2)
+            y = physical_master_center_y - (dialog_actual_height // 2)
+
+            # Set geometry using  dialog size and position
+            geometry_string = f'{dialog_width}x{dialog_height}+{x}+{y}'
+            self.geometry(geometry_string)
+
+        except Exception as e: # Fallback if any error occurs during calculation
+            print(f"Error during dialog centering: {e}")
+            screen_width = self.winfo_screenwidth()
+            screen_height = self.winfo_screenheight()
+            x_fb = (screen_width // 2) - (dialog_width // 2)
+            y_fb = (screen_height // 2) - (dialog_height // 2)
+            try:
+                self.geometry(f'{dialog_width}x{dialog_height}+{x_fb}+{y_fb}')
+            except Exception as e_fb:
+                 print(f"Error setting fallback geometry: {e_fb}")
+# endregion
 
 # region error popups
 def show_error_dialog(parent_window, message):
@@ -86,6 +177,7 @@ def show_error_dialog(parent_window, message):
     except Exception:
         pass
 
+    dialog.center_window() 
     dialog.transient(parent_window)
     dialog.grab_set()
     dialog.focus_force()
@@ -162,6 +254,7 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
 
     dialog.protocol("WM_DELETE_WINDOW", rename)
 
+    dialog.center_window()
     dialog.transient(parent_window)
     dialog.grab_set()
     dialog.focus_force()
@@ -253,6 +346,7 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
 
     dialog.protocol("WM_DELETE_WINDOW", on_no)
 
+    dialog.center_window() 
     dialog.transient(parent_window)
     dialog.grab_set()
     dialog.lift()
@@ -279,6 +373,17 @@ def show_unsaved_changes_dialog(parent_window):
         print(f"Error creating CTkFont objects: {e}")
         font_semibold_12 = ("Arial", 12, "bold")
         font_semibold_14 = ("Arial", 14, "bold")
+
+    # --- Determine Scaling Factor ---
+    scale_factor = 1.0
+    if platform.system() == "Windows":
+        try:
+            scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
+        except Exception:
+            try: # Fallback using parent window if ctypes fails
+                scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(parent_window.winfo_id())
+            except Exception:
+                print(f"Error getting scaling factor: {e}")
 
     dialog.geometry("330x140")
     dialog.minsize(330, 140)
@@ -314,7 +419,6 @@ def show_unsaved_changes_dialog(parent_window):
                                 width=80,
                                 font=font_semibold_12,
                                 command=on_save)
-    save_button.pack(side="left", padx=(100, 0), pady=10)
 
     discard_button = ctk.CTkButton(button_frame,
                                    text="Discard",
@@ -323,10 +427,23 @@ def show_unsaved_changes_dialog(parent_window):
                                    hover_color="#8E3B3B",
                                    font=font_semibold_12,
                                    command=on_discard)
-    discard_button.pack(side="right", padx=(0, 100), pady=10)
+
+    # TEMPORARY UI FIX, WILL ADD LAYOUT FOR EACH SCALING LATER 100, 125 ...
+    if scale_factor == 1.0:
+        # Add more bottom padding to frame and space between buttons for 100% scaling
+        button_frame.pack(pady=(18, 10), fill='x') # Increased bottom padding
+        save_button.pack(side="left", padx=(90, 10), pady=10) # Reduced outer, added inner padding
+        discard_button.pack(side="right", padx=(10, 90), pady=10) # Reduced outer, added inner padding
+    else:
+        # Default padding for other scaling factors
+        button_frame.pack(pady=(18, 0), fill='x')
+        save_button.pack(side="left", padx=(100, 0), pady=10)
+        discard_button.pack(side="right", padx=(0, 100), pady=10)
 
     dialog.protocol("WM_DELETE_WINDOW", on_cancel) # Treat 'X' as Cancel
 
+    dialog.update_idletasks()
+    dialog.center_window()
     dialog.transient(parent_window)
     dialog.grab_set()
     dialog.lift()
@@ -408,6 +525,9 @@ def path_prompt_popup(message):
              return
         path_popup_window = ToplevelIco(app, APP_ICON)
         setup_popup(path_popup_window, message)
+
+        path_popup_window.update_idletasks() # ensure size is calculated
+        path_popup_window.center_window() # center relative to parent (app)
         path_popup_window.transient(app)
         path_popup_window.grab_set()
         path_popup_window.lift()
@@ -425,11 +545,44 @@ def path_prompt_popup(message):
             global standalone_popup_window
             try:
                 standalone_popup_window = ctk.CTk()
-                setup_popup(standalone_popup_window, message)
+                setup_popup(standalone_popup_window, message) # Setup content 
+
+                # Ensure widgets are created and size is measurable
+                standalone_popup_window.update_idletasks()
+
+                # get Scaling Factor
+                scale_factor = 1.0
+                if platform.system() == "Windows":
+                    try:
+                        # Use ctypes to get primary monitor scaling
+                        scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
+                        print(f"Standalone Popup: Detected Windows Scale Factor: {scale_factor}")
+                    except Exception as e:
+                        print(f"Standalone Popup: Could not get scale factor via ctypes: {e}. Falling back to 1.0.")
+
+
+                # get window size and screen size
+                width = standalone_popup_window.winfo_reqwidth()
+                height = standalone_popup_window.winfo_reqheight()
+                screen_width = standalone_popup_window.winfo_screenwidth()
+                screen_height = standalone_popup_window.winfo_screenheight()
+
+                # Apply scaling factor to window width and height
+                actual_width = int(width * scale_factor)
+                actual_height = int(height * scale_factor)
+
+                # Calculate top-left corner (x, y) for window
+                x = (screen_width // 2) - (actual_width // 2)
+                y = (screen_height // 2) - (actual_height // 2)
+
+                # Set final geometry (size and position) 
+                standalone_popup_window.geometry(f'{width}x{height}+{x}+{y}')
+
                 standalone_popup_window.lift()
                 standalone_popup_window.focus_force()
                 standalone_popup_window.mainloop()
-            finally:
+
+            finally: # Cleanup
                 standalone_popup_window = None
                 print("Standalone popup closed.")
 
@@ -728,10 +881,15 @@ class ConfigWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Configure Folder Sorter")
-        self.geometry("547x700")
         self.iconbitmap(APP_ICON)
         self.resizable(False, True)
-        self.protocol("WM_DELETE_WINDOW", self.on_app_quit) # Ensure this is set
+        self.protocol("WM_DELETE_WINDOW", self.on_app_quit)
+        # Store initial logical dimensions for child popup windows to use
+        self.initial_width = 547
+        self.initial_height = 700
+        # Use these stored values for the initial geometry setting
+        width = self.initial_width
+        height = self.initial_height
 
         try:
             self.fonts = {
@@ -755,6 +913,41 @@ class ConfigWindow(ctk.CTk):
         self._build_add_frame()
         self._build_scrollable_frame()
 
+        # --- Center the main window ---
+        self.update_idletasks() # Ensure window and widgets exist and sizes are calculated
+
+        # get the scaling factor set by windows
+        scale_factor = 1.0
+        if platform.system() == "Windows":
+            try:
+                # GetScaleFactorForDevice(0) returns the scale factor for the primary monitor (e.g., 100, 125, 150)
+                scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
+                print(f"Detected Windows Scale Factor: {scale_factor}")
+
+            except Exception as e:
+                print(f"Could not get scale factor via ctypes: {e}")
+                # Try getting scaling from CustomTkinter after window creation
+                try:
+                    scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(self.winfo_id())
+                    print(f"Detected CustomTkinter Window DPI Scaling: {scale_factor}")
+                except Exception as e_ctk:
+                    print(f"Could not get scaling via CustomTkinter: {e_ctk}. Falling back to 1.0.")
+
+        # get display size
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+
+        # Apply scaling factor to window width and height
+        actual_width = int(width * scale_factor)
+        actual_height = int(height * scale_factor)
+
+        # Calculate top-left corner (x, y) for window
+        x = (screen_width // 2) - (actual_width // 2)
+        y = (screen_height // 2) - (actual_height // 2)
+
+        # Set final geometry (size and position)
+        self.geometry(f'{width}x{height}+{x}+{y}')
+
         file_sorter.set_gui_callbacks(
             self,
             lambda msg: show_error_dialog(self, msg),
@@ -762,7 +955,6 @@ class ConfigWindow(ctk.CTk):
         )
 
         self.render_scrollable_widget()
-
         self.lift()
         self.focus_app()
 
@@ -855,14 +1047,16 @@ class ConfigWindow(ctk.CTk):
     def _perform_quit(self):
         """Actually destroys the window and cleans up."""
         global app
+        # Clear the global reference in this module
         if app is self:
             app = None
+        # Also clear the reference held by file_sorter
+        if file_sorter.gui_app_instance is self:
+            file_sorter.gui_app_instance = None
+            file_sorter.show_error_dialog = None # Clear associated callbacks too
+            file_sorter.focus_app = None
+
         global standalone_popup_thread, standalone_popup_window
-        if standalone_popup_window and standalone_popup_window.winfo_exists():
-            standalone_popup_window.destroy()
-            standalone_popup_window = None
-        if standalone_popup_thread and standalone_popup_thread.is_alive():
-            print("Note: Standalone popup thread might still be running.")
         self.destroy()
         print("Config GUI closed.")
 

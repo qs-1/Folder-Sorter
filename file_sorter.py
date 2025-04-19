@@ -18,17 +18,18 @@ def set_gui_callbacks(app_instance, error_dialog_func, focus_app_func):
 
 def _schedule_on_gui_thread(callback, *args):
     """Safely schedules a function call on the GUI thread if possible."""
-    if gui_app_instance and gui_app_instance.winfo_exists():
+    # Check if the instance variable is set, but don't call winfo_exists here
+    if gui_app_instance:
         try:
             gui_app_instance.after(0, lambda cb=callback, a=args: cb(*a))
-            return True # Scheduled
+            return True # Scheduling attempted
         except Exception as e:
-            print(f"Error scheduling GUI call: {e}")
+            # Catch potential errors if the Tk object is already gone
+            print(f"Error scheduling GUI call for {callback.__name__}: {e}")
     else:
-        # Fallback or error handling if GUI isn't running
-        print(f"GUI not available to schedule call for {callback.__name__}")
-    return False # Not scheduled
-
+        # Fallback or error handling if GUI isn't running or instance not set
+        print(f"GUI instance not available to schedule call for {callback.__name__}")
+    return False # Not scheduled or instance not available
 
 def generate_unique_filename(directory, filename):
     base, extension = path.splitext(filename)
