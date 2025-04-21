@@ -23,6 +23,9 @@ from config_manager import (
 )
 import file_sorter
 
+# Force dark mode (realized light mode is broken, will fix soon)
+ctk.set_appearance_mode("dark")
+
 # Global variables to hold references to main GUI elements and threads.
 app = None                     # Main configuration window (CTk)
 path_popup_window = None       # Transient popup window (ToplevelIco, child)
