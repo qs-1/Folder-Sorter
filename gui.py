@@ -698,8 +698,8 @@ def process_extensions_string(extensions_str):
 # region CategoryRow
 class CategoryRow(ctk.CTkFrame):
     def __init__(self, master, config_window, folder_name, extensions, fonts, delete_icon):
-        super().__init__(master, width=450)
-        self.pack(fill="x", padx=2, pady=0)
+        super().__init__(master)
+        self.pack(fill="x", padx=2, pady=0) # expand row horizontally
 
         self.config_window = config_window
         self.original_folder = folder_name
@@ -708,17 +708,17 @@ class CategoryRow(ctk.CTkFrame):
         self.delete_icon = delete_icon
         self.is_dirty = False # to track unsaved changes
 
-        label_frame = ctk.CTkFrame(self, corner_radius=10, width=200, height=40)
+        label_frame = ctk.CTkFrame(self, corner_radius=10, height=40)
         label_frame.pack_propagate(False)
-        label_frame.pack(side="left", padx=(5,2), pady=5)
+        label_frame.pack(side="left", fill="x", expand=True, padx=(5,2), pady=5)
 
         self.folder_entry_var = ctk.StringVar(value=self.original_folder)
 
         self.folder_entry = ctk.CTkEntry(label_frame, font=self.fonts['regular_12'], textvariable=self.folder_entry_var)
-        self.folder_entry.pack(expand=True, fill="both", padx=5, pady=5)
+        self.folder_entry.pack(expand=True, fill="both", padx=5, pady=5) # fill="both" is fine here
 
-        self.extensions_textbox = ctk.CTkTextbox(self, width=200, height=60, font=self.fonts['regular_12'])
-        self.extensions_textbox.pack(side="left", padx=(12,0), pady=5)
+        self.extensions_textbox = ctk.CTkTextbox(self, height=60, font=self.fonts['regular_12'])
+        self.extensions_textbox.pack(side="left", fill="x", expand=True, padx=(12,0), pady=5)
         self.extensions_textbox.insert("1.0", self.original_extensions_str)
 
         self.extensions_textbox.bind("<Enter>", lambda e: self._on_textbox_enter(e), add="+")
@@ -878,7 +878,7 @@ class ConfigWindow(ctk.CTk):
         super().__init__()
         self.title("Configure Folder Sorter")
         self.iconbitmap(APP_ICON)
-        self.resizable(True, True) # Allow resizing (will make frames responsive soon)
+        self.resizable(True, True)
         self.protocol("WM_DELETE_WINDOW", self.on_app_quit)
 
         # --- Load Config Early for Geometry ---
@@ -929,10 +929,10 @@ class ConfigWindow(ctk.CTk):
             print("No valid saved geometry found. Centering window.")
             self._center_window_fallback() # Use centering instead
 
-        # --- Store initial size ---
-        self.update_idletasks()
-        self.initial_width = self.winfo_width()
-        self.initial_height = self.winfo_height()
+        # --- Set Minimum window Size ---
+        min_width = 547
+        min_height = 334
+        self.minsize(min_width, min_height)
 
         # --- Setup callbacks for cross-thread gui function calls ---
         file_sorter.set_gui_callbacks(
@@ -1200,13 +1200,13 @@ class ConfigWindow(ctk.CTk):
     def _build_add_frame(self):
         """Creates the frame for adding new categories."""
         add_frame = ctk.CTkFrame(self)
-        add_frame.pack(fill="x", padx=10, pady=(0,13))
-        add_frame.columnconfigure(0, weight=1)
-        add_frame.columnconfigure(1, weight=3)
+        add_frame.pack(fill="x", padx=10, pady=(0,13)) 
+        add_frame.columnconfigure(1, weight=1)
 
         new_category_label = ctk.CTkLabel(add_frame, text="New Category Name:", font=self.fonts['semibold_13'])
         new_category_label.grid(row=0, column=0, sticky="w", padx=(10, 5), pady=7)
         self.new_category_entry = ctk.CTkEntry(add_frame, height=25, font=self.fonts['regular_12'])
+        # sticky="ew" makes the entry fill its grid cell horizontally
         self.new_category_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=7)
 
         new_extensions_label = ctk.CTkLabel(add_frame, text="Extensions (comma separated):", font=self.fonts['semibold_13'])
