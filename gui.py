@@ -38,64 +38,49 @@ class ToplevelIco(ctk.CTkToplevel):
     """Custom CTkToplevel that fixes icon updation bug"""
     def __init__(self, master=None, icon_path=None):
         super().__init__(master)
-        # Store initial master dimensions if available (assuming master is ConfigWindow)
-        if hasattr(master, 'initial_width') and hasattr(master, 'initial_height'):
-            self.master_initial_width = master.initial_width
-            self.master_initial_height = master.initial_height
-        else:
-            self.master_initial_width = None
-            self.master_initial_height = None
-
         if icon_path:
             self.after(201, lambda: self.iconbitmap(icon_path))
 
     def center_window(self):
-        self.update_idletasks() # Ensure dialog measurements are up-to-date
+        self.update_idletasks() # Ensure dialog measurements are up to date
 
-        # Get Dialog's size
-        dialog_width = self.winfo_reqwidth()
-        dialog_height = self.winfo_reqheight()
-
+        # Get Dialog's current size after update_idletasks
+        dialog_width = self.winfo_width()
+        dialog_height = self.winfo_height()
 
         if not self.master or not self.master.winfo_exists():
             print("Error: Cannot center dialog, master window invalid.")
-            # Fallback: center on screen? Or just place at default?
-            # Centering on screen for now as a basic fallback
+            # Fallback: center on screen
             screen_width = self.winfo_screenwidth()
             screen_height = self.winfo_screenheight()
-            x = (screen_width // 2) - (dialog_width // 2) 
-            y = (screen_height // 2) - (dialog_height // 2)
+            x = max(0, (screen_width // 2) - (dialog_width // 2))
+            y = max(0, (screen_height // 2) - (dialog_height // 2))
             self.geometry(f'{dialog_width}x{dialog_height}+{x}+{y}')
             return
 
         try:
-            # --- Get Scaling Factor ---
+            # --- Get Scaling Factor (Prioritize ctypes on Windows) ---
             scale_factor = 1.0
-            try:
-                # Try getting scaling factor from the master window first
-                self.master.update_idletasks() # Ensure master handle is ready
-                scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(self.master.winfo_id())
-            except Exception as e_ctk:
-                if platform.system() == "Windows":
+            if platform.system() == "Windows":
+                try:
+                    scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
+                    # print(f"Dialog Center: Using ctypes scale factor: {scale_factor}") # Optional debug
+                except Exception as e_ctypes:
+                    print(f"Dialog Center: Error getting scaling via ctypes ({e_ctypes}), trying CTk...")
                     try:
-                        scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
-                    except Exception as e_ctypes:
-                        scale_factor = 1.0
-                else:
-                     scale_factor = 1.0
+                        # Fallback to CTk ScalingTracker
+                        self.master.update_idletasks() # Ensure master handle is ready
+                        scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(self.master.winfo_id())
+                    except Exception as e_ctk:
+                        print(f"Dialog Center: Error getting scaling via CTk ({e_ctk}), using 1.0.")
+                        scale_factor = 1.0 # Ultimate fallback
+            # print(f"Dialog Center: Final Scale Factor: {scale_factor}") # Debug
 
-            # --- Master Geometry ---
+            # --- Master Geometry (Current) ---
             master_x = self.master.winfo_x()
             master_y = self.master.winfo_y()
-
-            # Use stored initial logical size if available, otherwise fallback
-            if self.master_initial_width is not None and self.master_initial_height is not None:
-                master_logical_width = self.master_initial_width
-                master_logical_height = self.master_initial_height
-            else:
-                # Fallback, Get current size
-                master_logical_width = self.master.winfo_width()
-                master_logical_height = self.master.winfo_height()
+            master_logical_width = self.master.winfo_width()
+            master_logical_height = self.master.winfo_height()
 
             # Calculate sizes and center
             master_actual_width = int(master_logical_width * scale_factor)
@@ -103,28 +88,33 @@ class ToplevelIco(ctk.CTkToplevel):
             dialog_actual_width = int(dialog_width * scale_factor)
             dialog_actual_height = int(dialog_height * scale_factor)
 
-            # Calculate master's center
+            # Calculate master's physical center on screen
             physical_master_center_x = master_x + (master_actual_width // 2)
             physical_master_center_y = master_y + (master_actual_height // 2)
 
-            # Calculate dialog's top-left
+            # Calculate dialog's top-left physical position
             x = physical_master_center_x - (dialog_actual_width // 2)
             y = physical_master_center_y - (dialog_actual_height // 2)
 
-            # Set geometry using  dialog size and position
+            # Ensure dialog is within screen bounds
+            x = max(0, x)
+            y = max(0, y)
+
+            # Set geometry using current dialog size and calculated position
             geometry_string = f'{dialog_width}x{dialog_height}+{x}+{y}'
+            # print(f"Dialog Center: Setting Geometry: {geometry_string}") # Debug
             self.geometry(geometry_string)
 
         except Exception as e: # Fallback if any error occurs during calculation
             print(f"Error during dialog centering: {e}")
             screen_width = self.winfo_screenwidth()
             screen_height = self.winfo_screenheight()
-            x_fb = (screen_width // 2) - (dialog_width // 2)
-            y_fb = (screen_height // 2) - (dialog_height // 2)
+            x_fb = max(0, (screen_width // 2) - (dialog_width // 2))
+            y_fb = max(0, (screen_height // 2) - (dialog_height // 2))
             try:
                 self.geometry(f'{dialog_width}x{dialog_height}+{x_fb}+{y_fb}')
             except Exception as e_fb:
-                 print(f"Error setting fallback geometry: {e_fb}")
+                print(f"Error setting fallback geometry: {e_fb}")
 # endregion
 
 # region error popups
@@ -524,7 +514,7 @@ def path_prompt_popup(message):
 
     if app and app.winfo_exists():
         if path_popup_window and path_popup_window.winfo_exists():
-             path_popup_window.focus_force()
+             path_popup_window.after(0, path_popup_window.focus_force)
              return
         path_popup_window = ToplevelIco(app, APP_ICON)
         setup_popup(path_popup_window, message)
@@ -536,9 +526,12 @@ def path_prompt_popup(message):
         path_popup_window.lift()
         path_popup_window.focus_force()
 
-    else:
+    else: # Main app doesn't exist, handle standalone
         if standalone_popup_window and standalone_popup_window.winfo_exists():
-            standalone_popup_window.focus_force()
+            try:
+                standalone_popup_window.after(0, standalone_popup_window.focus_force)
+            except Exception as e:
+                print(f"Error scheduling focus for standalone popup: {e}")
             return
         if standalone_popup_thread and standalone_popup_thread.is_alive():
             print("Standalone popup thread already running.")
@@ -885,15 +878,13 @@ class ConfigWindow(ctk.CTk):
         super().__init__()
         self.title("Configure Folder Sorter")
         self.iconbitmap(APP_ICON)
-        self.resizable(False, True)
+        self.resizable(True, True) # Allow resizing (will make frames responsive soon)
         self.protocol("WM_DELETE_WINDOW", self.on_app_quit)
-        # Store initial logical dimensions for child popup windows to use
-        self.initial_width = 547
-        self.initial_height = 700
-        # Use these stored values for the initial geometry setting
-        width = self.initial_width
-        height = self.initial_height
 
+        # --- Load Config Early for Geometry ---
+        saved_geometry = config.get("window_geometry")
+
+        # --- Font and Icon Setup ---
         try:
             self.fonts = {
                 'regular_9': ctk.CTkFont(family=REGULAR_FONT.getname()[0], size=9),
@@ -912,54 +903,102 @@ class ConfigWindow(ctk.CTk):
             print(f"Error creating CTkFont objects or loading image: {e}")
             sys.exit(1)
 
+        # --- Build UI Elements ---
         self._build_path_frame()
         self._build_add_frame()
         self._build_scrollable_frame()
 
-        # --- Center the main window ---
-        self.update_idletasks() # Ensure window and widgets exist and sizes are calculated
+        # --- Set Initial Geometry ---
+        self.update_idletasks()
 
-        # get the scaling factor set by windows
-        scale_factor = 1.0
-        if platform.system() == "Windows":
+        geometry_applied = False
+        if saved_geometry:
             try:
-                # GetScaleFactorForDevice(0) returns the scale factor for the primary monitor (e.g., 100, 125, 150)
-                scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
-                print(f"Detected Windows Scale Factor: {scale_factor}")
-
+                # validity check
+                if isinstance(saved_geometry, str) and 'x' in saved_geometry and '+' in saved_geometry:
+                    self.geometry(saved_geometry)
+                    print(f"Applied saved geometry: {saved_geometry}")
+                    geometry_applied = True
+                else:
+                    print(f"Warning: Invalid saved geometry format '{saved_geometry}'. Falling back to centering.")
             except Exception as e:
-                print(f"Could not get scale factor via ctypes: {e}")
-                # Try getting scaling from CustomTkinter after window creation
-                try:
-                    scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(self.winfo_id())
-                    print(f"Detected CustomTkinter Window DPI Scaling: {scale_factor}")
-                except Exception as e_ctk:
-                    print(f"Could not get scaling via CustomTkinter: {e_ctk}. Falling back to 1.0.")
+                print(f"Error applying saved geometry '{saved_geometry}': {e}. Falling back to centering.")
 
-        # get display size
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
+        if not geometry_applied:
+            # No saved geometry or it was invalid, center the window on first launch/error
+            print("No valid saved geometry found. Centering window.")
+            self._center_window_fallback() # Use centering instead
 
-        # Apply scaling factor to window width and height
-        actual_width = int(width * scale_factor)
-        actual_height = int(height * scale_factor)
+        # --- Store initial size ---
+        self.update_idletasks()
+        self.initial_width = self.winfo_width()
+        self.initial_height = self.winfo_height()
 
-        # Calculate top-left corner (x, y) for window
-        x = (screen_width // 2) - (actual_width // 2)
-        y = (screen_height // 2) - (actual_height // 2)
-
-        # Set final geometry (size and position)
-        self.geometry(f'{width}x{height}+{x}+{y}')
-
+        # --- Setup callbacks for cross-thread gui function calls ---
         file_sorter.set_gui_callbacks(
-            self,
-            lambda msg: show_error_dialog(self, msg),
-            self.focus_app
+            self, # Pass the ConfigWindow instance
+            lambda msg: show_error_dialog(self, msg), # Function to show error dialogs
+            self.focus_app # Function to bring the window to the front
         )
-
         self.render_scrollable_widget()
         self.lift()
         self.focus_app()
+
+    def _center_window_fallback(self):
+        """Centers the window on the screen (used for first launch or errors)."""
+
+        # Default desired size
+        default_width = 547
+        default_height = 700
+
+        try:
+            # --- Set minimum size FIRST ---
+            self.minsize(default_width, default_height)
+
+            # --- Apply initial size (position will be set later) ---
+            self.geometry(f'{default_width}x{default_height}')
+            self.update_idletasks() # Process geometry and minsize changes
+
+            # --- Calculate Position using the INTENDED default size ---
+            scale_factor = 1.0
+            if platform.system() == "Windows":
+                try:
+                    # Prioritize ctypes for scaling
+                    scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
+                    # print(f"Fallback Center: Using ctypes scale factor: {scale_factor}") # Optional debug
+                except Exception as e_ctypes:
+                    print(f"Fallback Center: Error getting scaling via ctypes ({e_ctypes}), trying CTk...")
+                    try:
+                        # Fallback to CTk ScalingTracker
+                        scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(self.winfo_id())
+                    except Exception as e_ctk:
+                        print(f"Fallback Center: Error getting scaling via CTk ({e_ctk}), using 1.0.")
+                        scale_factor = 1.0 # Ultimate fallback
+            # print(f"Fallback Center: Final Scale Factor: {scale_factor}") # Debug
+
+            screen_width = self.winfo_screenwidth()
+            screen_height = self.winfo_screenheight()
+
+            # Use the DEFAULT size for centering calculation
+            actual_width_scaled = int(default_width * scale_factor)
+            actual_height_scaled = int(default_height * scale_factor)
+
+            x = max(0, (screen_width // 2) - (actual_width_scaled // 2))
+            y = max(0, (screen_height // 2) - (actual_height_scaled // 2))
+
+            # --- Set final geometry using DEFAULT size and calculated position ---
+            final_geometry = f'{default_width}x{default_height}+{x}+{y}'
+            self.geometry(final_geometry)
+            print(f"Centered window geometry: {final_geometry}")
+
+        except Exception as e:
+            print(f"Error during fallback centering: {e}")
+            # Apply a basic default if centering fails
+            try:
+                # Use the default size variables here
+                self.geometry(f'{default_width}x{default_height}+100+100')
+            except Exception as basic_e:
+                print(f"Failed to set even basic geometry: {basic_e}")
 
     def get_category_rows(self):
         """Returns a list of all CategoryRow widgets."""
@@ -1012,63 +1051,104 @@ class ConfigWindow(ctk.CTk):
 
         # Only re-render if no errors/cancellations stopped us,
         # some rows were actually saved, AND we are asked to render on success
-        if rows_to_rerender and render_on_success: 
+        if rows_to_rerender and render_on_success:
             self.render_scrollable_widget()
 
         return True # All dirty rows were processed successfully without errors or cancellations
 
     def on_app_quit(self):
         """Handles the application quit event, checking for unsaved changes."""
+        # --- Try to save geometry FIRST ---
+        try:
+            # Ensure window still exists and update pending changes
+            if self.winfo_exists():
+                self.update_idletasks() # Process pending events like resize/move
+                current_geometry = self.geometry()
+                # Basic check: Avoid saving clearly invalid small sizes if possible
+                # (This is a heuristic, might need adjustment)
+                try:
+                    size_part = current_geometry.split('+')[0]
+                    w_str, h_str = size_part.split('x')
+                    if int(w_str) > 50 and int(h_str) > 50: # Only save if size seems reasonable
+                         save_config(window_geometry=current_geometry)
+                         print(f"Saved geometry on quit attempt: {current_geometry}")
+                    else:
+                         print(f"Skipping save of potentially invalid geometry: {current_geometry}")
+                except Exception:
+                     print(f"Could not parse geometry to validate size, saving anyway: {current_geometry}")
+                     save_config(window_geometry=current_geometry) # Save if parsing fails
+            else:
+                print("Window already destroyed, cannot save geometry.")
+        except Exception as e:
+            print(f"Error saving window geometry during quit: {e}")
+
+        # --- Now handle unsaved changes ---
+        proceed_with_quit = True # Assume we can quit unless checks fail
         if self.has_unsaved_changes():
             result = show_unsaved_changes_dialog(self)
             if result == "save":
-                # Call save_all_changes, but tell it not to re-render ui on success
                 save_outcome = self.save_all_changes(render_on_success=False)
-
                 if save_outcome is True:
-                    # All changes saved successfully
-                    self._perform_quit() # Proceed to quit immediately
+                    proceed_with_quit = True # Save successful, can quit
                 elif isinstance(save_outcome, str):
-                    # A validation error occurred, show the specific message
                     show_error_dialog(self, f"Failed to save changes:\n\n{save_outcome}")
-                    # Do not quit, allow the user to fix the error
-                    return
+                    proceed_with_quit = False # Save failed, don't quit
                 elif save_outcome is False:
-                    # User cancelled a sub-dialog during save_all_changes
-                    # No error message needed, just don't quit
-                    return
-
+                    proceed_with_quit = False # User cancelled save, don't quit
             elif result == "discard":
-                self._perform_quit()
+                proceed_with_quit = True # Discarding, can quit
             elif result == "cancel":
-                # User cancelled the unsaved changes dialog
-                return
+                proceed_with_quit = False # User cancelled, don't quit
         else:
             # No unsaved changes
+            proceed_with_quit = True
+
+        # --- Perform actual quit if allowed ---
+        if proceed_with_quit:
             self._perform_quit()
+        else:
+            print("Quit cancelled.") # User chose not to quit or save failed
 
     def _perform_quit(self):
-        """Actually destroys the window and cleans up."""
+        """Actually destroys the window and cleans up references."""
         global app
-        # Clear the global reference in this module
+        print("Performing quit...") # Added print
+
+        # --- Clear References ---
+        # References are cleared here, AFTER geometry is saved in on_app_quit
         if app is self:
             app = None
-        # Also clear the reference held by file_sorter
         if file_sorter.gui_app_instance is self:
             file_sorter.gui_app_instance = None
-            file_sorter.show_error_dialog = None # Clear associated callbacks too
+            file_sorter.show_error_dialog = None
             file_sorter.focus_app = None
 
-        global standalone_popup_thread, standalone_popup_window
-        self.destroy()
-        print("Config GUI closed.")
+        # --- Destroy Window ---
+        try:
+            if self.winfo_exists():
+                self.destroy()
+            print("Config GUI closed.")
+        except Exception as e:
+            print(f"Error during window destruction: {e}")
 
     def focus_app(self):
-        self.focus_force()
+        """Brings the window to the front and gives it focus."""
+        try:
+            if self.winfo_exists():
+                self.lift()
+                self.focus_force()
+                # Optional: De-iconify if minimized (platform-dependent)
+                if platform.system() == "Windows":
+                    self.wm_state('normal') # Should restore from minimized
+                else:
+                    self.deiconify() # General Tkinter method
+        except Exception as e:
+            print(f"Error focusing app window: {e}")
+
 
     def _build_path_frame(self):
         """Creates the top frame for folder path selection."""
-        config_data = load_config()
+        # config should be loaded already
         path_frame = ctk.CTkFrame(self)
         path_frame.pack(fill="x", padx=10, pady=10)
 
@@ -1079,9 +1159,9 @@ class ConfigWindow(ctk.CTk):
         self.path_entry.pack(side="left", fill="x", expand=True, padx=5, pady=7)
         self.path_entry.configure(state='disabled')
 
-        self.tooltip = CTkToolTip(self.path_entry, message=config_data.get('folder_path', "No Path Set"),
+        self.tooltip = CTkToolTip(self.path_entry, message=config.get('folder_path', "No Path Set"),
                                   x_offset=-5, y_offset=20, alpha=0.87, font=('Cascadia Code', 12))
-        self.refresh_path_entry(config_data.get('folder_path', ''))
+        self.refresh_path_entry(config.get('folder_path', ''))
 
         browse_button = ctk.CTkButton(path_frame, text="Browse", width=12, font=self.fonts['regular_12'], command=self.select_folder)
         browse_button.pack(side="right", padx=(7,8), pady=7)
@@ -1092,13 +1172,16 @@ class ConfigWindow(ctk.CTk):
         if not new_path:
             new_path = ""
         try:
-            self.path_entry.configure(state='normal')
-            self.path_entry.delete(0, ctk.END)
-            self.path_entry.insert(0, new_path)
-            self.path_entry.configure(state='disabled')
-            self.tooltip.configure(message=new_path if new_path else "No Path Set")
-        except Exception:
-            pass
+            # Check if widget exists before configuring
+            if hasattr(self, 'path_entry') and self.path_entry.winfo_exists():
+                self.path_entry.configure(state='normal')
+                self.path_entry.delete(0, ctk.END)
+                self.path_entry.insert(0, new_path)
+                self.path_entry.configure(state='disabled')
+            if hasattr(self, 'tooltip') and self.tooltip: # Check tooltip exists
+                 self.tooltip.configure(message=new_path if new_path else "No Path Set")
+        except Exception as e:
+            print(f"Error refreshing path entry: {e}") # Log error
 
     def select_folder(self):
         """Open folder selection dialog and update path"""
@@ -1107,11 +1190,11 @@ class ConfigWindow(ctk.CTk):
             save_config(folder_path=folder_path)
 
             global path_popup_window
-            if path_popup_window:
+            if path_popup_window and path_popup_window.winfo_exists():
                 self.refresh_path_entry(folder_path)
                 path_popup_window.destroy()
                 path_popup_window = None
-            elif self.path_entry:
+            elif hasattr(self, 'path_entry') and self.path_entry.winfo_exists(): # Check if main window exists
                 self.refresh_path_entry(folder_path)
 
     def _build_add_frame(self):
@@ -1149,9 +1232,9 @@ class ConfigWindow(ctk.CTk):
             show_error_dialog(self, error_message)
             return
 
-        config_data = load_config()
-        config_data['folder_extensions_mapping'][folder_name] = ordered_unique_extensions
-        save_config(folder_extensions_mapping=config_data['folder_extensions_mapping'])
+        # config should be loaded already
+        config['folder_extensions_mapping'][folder_name] = ordered_unique_extensions
+        save_config(folder_extensions_mapping=config['folder_extensions_mapping'])
 
         self.render_scrollable_widget()
 
@@ -1167,9 +1250,11 @@ class ConfigWindow(ctk.CTk):
 
     def render_scrollable_widget(self):
         """Renders the list of existing categories using CategoryRow."""
+        # Destroy existing widgets first
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
+        # Build Header
         header_frame = ctk.CTkFrame(self.scrollable_frame)
         header_frame.pack(fill="x", padx=5, pady=10)
         folders_frame = ctk.CTkFrame(header_frame, corner_radius=8, fg_color="#242424")
@@ -1181,9 +1266,10 @@ class ConfigWindow(ctk.CTk):
         extensions_label = ctk.CTkLabel(extensions_frame, text="Extensions", font=self.fonts['semibold_12'])
         extensions_label.pack(padx=7)
 
-        config_data = load_config()
-        sorted_folder_extensions = sorted(config_data['folder_extensions_mapping'].items(), key=lambda item: item[0].lower())
+        # config should be loaded already
+        sorted_folder_extensions = sorted(config['folder_extensions_mapping'].items(), key=lambda item: item[0].lower())
 
+        # Build Rows
         for folder, extensions in sorted_folder_extensions:
             CategoryRow(
                 master=self.scrollable_frame,

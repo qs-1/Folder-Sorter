@@ -37,7 +37,7 @@ def open_config_gui():
         print("Config GUI is already open. Attempting to focus.")
         try:
             # Schedule lift/focus on the GUI's mainloop thread
-            gui.app.after(0, gui.focus_app)
+            gui.app.after(0, gui.app.focus_app)
         except Exception as e:
             print(f"Error focusing existing GUI: {e}")
         return

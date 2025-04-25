@@ -39,41 +39,50 @@ except OSError as e:
 # Global config variable
 config = None
 
-def save_config(folder_path=None, folder_extensions_mapping=None, duplicates_checked_path=None, dont_show_again=None):
+def save_config(folder_path=None, folder_extensions_mapping=None, duplicates_checked_path=None, dont_show_again=None, window_geometry=None): 
     global config
+    if config is None: # Ensure config is loaded if save is called before load 
+        load_config()
     # Update config keys
-    if folder_path:
+    if folder_path is not None: # Check for None explicitly if empty string is valid
         config['folder_path'] = folder_path
-    if folder_extensions_mapping:
+    if folder_extensions_mapping is not None:
         config['folder_extensions_mapping'] = folder_extensions_mapping
     if duplicates_checked_path:
+        # Ensure the list exists before appending
+        if 'duplicates_checked_paths' not in config or not isinstance(config['duplicates_checked_paths'], list):
+            config['duplicates_checked_paths'] = []
         config['duplicates_checked_paths'].append(duplicates_checked_path)
     if dont_show_again is not None:
         config['dont_show_again'] = dont_show_again
+    if window_geometry is not None: 
+        config['window_geometry'] = window_geometry
 
     try:
-        with open(CONFIG_FILE, 'w') as f:
-            dump(config, f)
+        # Ensure config is not None before saving
+        if config is not None:
+            with open(CONFIG_FILE, 'w') as f:
+                dump(config, f, indent=4) 
+        else:
+            print("Error: Config is None, cannot save.")
     except IOError as e:
         print(f"Error saving config: {e}")
+    except TypeError as e:
+        print(f"Error serializing config to JSON: {e}")
+
 
 def load_config():
     global config
-    if path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                config = load(f)
-                # Validate config keys
-                if 'folder_path' in config and 'folder_extensions_mapping' in config:
-                    return config
-                else:
-                    print("Invalid config file format. Loading default config.")
-        except (IOError, JSONDecodeError) as e:
-            print(f"Error loading config: {e}")
-    
-    # Loading default configuration (since no config file exists or is invalid)
+    # If config is already loaded and seems valid, return it
+    if config and 'folder_path' in config and 'folder_extensions_mapping' in config:
+         # Ensure all expected keys exist, adding defaults if missing
+         config.setdefault('duplicates_checked_paths', [])
+         config.setdefault('dont_show_again', False)
+         config.setdefault('window_geometry', None)
+         return config
+
     default_config = {
-        'folder_path': None, 
+        'folder_path': None,
         'folder_extensions_mapping': {
             'Archive': ['rar', 'zip', '7z'],
             'Torrents': ['torrent'],
@@ -93,12 +102,38 @@ def load_config():
             'Text': ['txt', 'reg']
         },
         'duplicates_checked_paths': [],
-        'dont_show_again': False
+        'dont_show_again': False,
+        'window_geometry': None
     }
-    #update global config
+
+    if path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                loaded_data = load(f)
+                # Basic validation
+                if isinstance(loaded_data, dict) and 'folder_path' in loaded_data and 'folder_extensions_mapping' in loaded_data:
+                    config = loaded_data
+                    # Ensure all expected keys exist, adding defaults if missing
+                    config.setdefault('duplicates_checked_paths', [])
+                    config.setdefault('dont_show_again', False)
+                    config.setdefault('window_geometry', None)
+                    print("Config loaded successfully.")
+                    return config
+                else:
+                    print("Invalid config file format. Loading default config.")
+        except (IOError, JSONDecodeError) as e:
+            print(f"Error loading config: {e}. Loading default config.")
+
+    # Use default if file doesn't exist, is invalid, or error occurred
+    print("Loading default configuration.")
     config = default_config
-    #write to file
-    save_config(default_config['folder_path'], default_config['folder_extensions_mapping'], dont_show_again=default_config['dont_show_again'])
+    # Save the default config immediately so the file exists
+    save_config(
+        folder_path=config['folder_path'],
+        folder_extensions_mapping=config['folder_extensions_mapping'],
+        dont_show_again=config['dont_show_again'],
+        window_geometry=config['window_geometry'] # Save the default None
+    )
     return config
 
 # Initialize config when module is imported
