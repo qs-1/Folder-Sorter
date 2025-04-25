@@ -2,6 +2,8 @@
 
 A Windows system tray app to automatically sort files into categorized subfolders based on extensions. Includes a GUI for configuration.
 
+> **⚠️ Disclaimer:** This app directly modifies your file system by moving files based on your configuration. Incorrect configuration or unintended use could lead to permanent changes in your directory structure. **Please use with caution and ensure your configuration is correct before sorting.** It's recommended to test on a non-critical folder first.
+
 **Note:** Currently Windows only due to `win11toast` notifications. Support for macOS and Linux soon.
 
 <div align="center">
@@ -25,7 +27,7 @@ A Windows system tray app to automatically sort files into categorized subfolder
 ## Installation
 
 1.  **Prerequisites:** Windows, Python 3.x.
-2.  **Get Code (Optional):**
+2.  **Get Code:**
     ```bash
     git clone https://github.com/qs-1/Folder-Sorter.git
     cd Folder-Sorter
