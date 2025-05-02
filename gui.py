@@ -41,12 +41,11 @@ class ToplevelIco(ctk.CTkToplevel):
         if icon_path:
             self.after(201, lambda: self.iconbitmap(icon_path))
 
-    def center_window(self):
+    def center_window(self, width=None, height=None):
         self.update_idletasks() # Ensure dialog measurements are up to date
 
-        # Get Dialog's current size after update_idletasks
-        dialog_width = self.winfo_width()
-        dialog_height = self.winfo_height()
+        dialog_width = width if width is not None else self.winfo_width()
+        dialog_height = height if height is not None else self.winfo_height()
 
         if not self.master or not self.master.winfo_exists():
             print("Error: Cannot center dialog, master window invalid.")
@@ -64,7 +63,6 @@ class ToplevelIco(ctk.CTkToplevel):
             if platform.system() == "Windows":
                 try:
                     scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
-                    # print(f"Dialog Center: Using ctypes scale factor: {scale_factor}") # Optional debug
                 except Exception as e_ctypes:
                     print(f"Dialog Center: Error getting scaling via ctypes ({e_ctypes}), trying CTk...")
                     try:
@@ -74,9 +72,8 @@ class ToplevelIco(ctk.CTkToplevel):
                     except Exception as e_ctk:
                         print(f"Dialog Center: Error getting scaling via CTk ({e_ctk}), using 1.0.")
                         scale_factor = 1.0 # Ultimate fallback
-            # print(f"Dialog Center: Final Scale Factor: {scale_factor}") # Debug
 
-            # --- Master Geometry (Current) ---
+            # --- Master Geometry ---
             master_x = self.master.winfo_x()
             master_y = self.master.winfo_y()
             master_logical_width = self.master.winfo_width()
@@ -100,9 +97,8 @@ class ToplevelIco(ctk.CTkToplevel):
             x = max(0, x)
             y = max(0, y)
 
-            # Set geometry using current dialog size and calculated position
+            # Set geometry using potentially provided dialog size and calculated position
             geometry_string = f'{dialog_width}x{dialog_height}+{x}+{y}'
-            # print(f"Dialog Center: Setting Geometry: {geometry_string}") # Debug
             self.geometry(geometry_string)
 
         except Exception as e: # Fallback if any error occurs during calculation
@@ -116,6 +112,7 @@ class ToplevelIco(ctk.CTkToplevel):
             except Exception as e_fb:
                 print(f"Error setting fallback geometry: {e_fb}")
 # endregion
+
 
 # region error popups
 def show_error_dialog(parent_window, message):
@@ -136,40 +133,46 @@ def show_error_dialog(parent_window, message):
         ctk_font_semibold_12 = None
         ctk_font_semibold_14 = None
 
-    dialog.geometry("400x150")
-    dialog.minsize(400, 150)
-    dialog.resizable(False, False)
-    dialog.iconbitmap(APP_ICON)
+    # Create main content frame with padding
+    content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    content_frame.columnconfigure(0, weight=1)
+    content_frame.rowconfigure(0, weight=1)
+    content_frame.rowconfigure(1, weight=0)
 
-    label = ctk.CTkLabel(dialog,
-                        text=message,
-                        font=ctk_font_semibold_14,
-                        wraplength=380)
-    label.pack(pady=(20, 10), padx=10)
+    label = ctk.CTkLabel(
+        content_frame,
+        text=message,
+        font=ctk_font_semibold_14,
+        wraplength=380,
+        justify="left"
+    )
+    label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
-    button_frame = ctk.CTkFrame(dialog, fg_color="#242424")
-    button_frame.pack(pady=10, fill='x')
+    button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+    button_frame.grid(row=1, column=0, sticky="ew")
+    button_frame.columnconfigure(0, weight=1)
 
     def on_ok():
         dialog.destroy()
 
-    ok_button = ctk.CTkButton(button_frame,
-                            text="OK",
-                            width=80,
-                            font=ctk_font_semibold_12,
-                            command=on_ok)
-    ok_button.pack(pady=10)
+    ok_button = ctk.CTkButton(
+        button_frame,
+        text="OK",
+        width=80,
+        font=ctk_font_semibold_12,
+        command=on_ok
+    )
+    ok_button.grid(row=0, column=0, pady=10)
 
+    # Set minimum size and update
     dialog.update_idletasks()
-
-    try:
-        req_width = label.winfo_reqwidth()
-        req_height = label.winfo_reqheight()
-        btn_height = button_frame.winfo_reqheight()
-        dialog.geometry(f"{max(400, req_width + 20)}x{req_height + btn_height + 60}")
-    except Exception:
-        pass
-
+    min_width = max(380, label.winfo_reqwidth() + 40) 
+    min_height = label.winfo_reqheight() + ok_button.winfo_reqheight() + 80
+    dialog.minsize(min_width, min_height)
+    dialog.resizable(False, False)
+    
+    # Center on parent
     dialog.center_window() 
     dialog.transient(parent_window)
     dialog.grab_set()
@@ -186,6 +189,7 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
 
     dialog = ToplevelIco(parent_window, APP_ICON)
     dialog.title("Folder Already Exists")
+    dialog.result = False  # Default result
 
     try:
         ctk_font_semibold_12 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12)
@@ -195,21 +199,33 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
         ctk_font_semibold_12 = None
         ctk_font_semibold_14 = None
 
-    dialog.geometry("400x150")
-    dialog.minsize(400, 150)
-    dialog.resizable(False, False)
-    dialog.iconbitmap(APP_ICON)
+    # Create main content frame with padding
+    content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    content_frame.columnconfigure(0, weight=1)
+    content_frame.rowconfigure(0, weight=1)
+    content_frame.rowconfigure(1, weight=0)
 
-    label = ctk.CTkLabel(dialog,
-                        text=f"Folder '{folder_name}' already exists in the list.",
-                        font=ctk_font_semibold_14,
-                        wraplength=380)
-    label.pack(pady=(20, 10), padx=10)
+    # Message label
+    label = ctk.CTkLabel(
+        content_frame,
+        text=f"Folder '{folder_name}' already exists in the list.",
+        font=ctk_font_semibold_14,
+        wraplength=380,
+        justify="left"
+    )
+    label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
-    button_frame = ctk.CTkFrame(dialog, fg_color="#242424")
-    button_frame.pack(pady=10, fill='x')
-
-    dialog.result = False
+    # Button frame
+    button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+    button_frame.grid(row=1, column=0, sticky="ew")
+    
+    # Configure button frame columns for spacing
+    button_frame.columnconfigure(0, weight=1)
+    button_frame.columnconfigure(1, weight=0)
+    button_frame.columnconfigure(2, weight=1)
+    button_frame.columnconfigure(3, weight=0)
+    button_frame.columnconfigure(4, weight=1)
 
     def use_same_folder():
         dialog.result = True
@@ -219,35 +235,35 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
         dialog.result = False
         dialog.destroy()
 
-    use_button = ctk.CTkButton(button_frame,
-                            text="Use Same Folder",
-                            width=120,
-                            font=ctk_font_semibold_12,
-                            command=use_same_folder)
-    use_button.pack(side="left", padx=(80,0), pady=10)
+    use_button = ctk.CTkButton(
+        button_frame,
+        text="Use Same Folder",
+        width=120,
+        font=ctk_font_semibold_12,
+        command=use_same_folder
+    )
+    use_button.grid(row=0, column=1, padx=10, pady=10)
 
-    rename_button = ctk.CTkButton(button_frame,
-                                text="Cancel",
-                                width=80,
-                                fg_color="#343638",
-                                hover_color="#2d2a2e",
-                                font=ctk_font_semibold_12,
-                                command=rename)
-    rename_button.pack(side="right", padx=(0,100), pady=10)
+    rename_button = ctk.CTkButton(
+        button_frame,
+        text="Cancel",
+        width=80,
+        fg_color="#343638",
+        hover_color="#2d2a2e",
+        font=ctk_font_semibold_12,
+        command=rename
+    )
+    rename_button.grid(row=0, column=3, padx=10, pady=10)
 
+    # Set minimum size and update
     dialog.update_idletasks()
-
-    try:
-        req_width = label.winfo_reqwidth()
-        req_height = label.winfo_reqheight()
-        btn_height = button_frame.winfo_reqheight()
-        dialog.geometry(f"{max(400, req_width + 20)}x{req_height + btn_height + 60}")
-    except Exception:
-        pass
+    min_width = max(380, label.winfo_reqwidth() + 40)
+    min_height = label.winfo_reqheight() + button_frame.winfo_reqheight() + 80
+    dialog.minsize(min_width, min_height)
+    dialog.resizable(False, False)
 
     dialog.protocol("WM_DELETE_WINDOW", rename)
-
-    dialog.center_window()
+    dialog.center_window(width=min_width, height=min_height)
     dialog.transient(parent_window)
     dialog.grab_set()
     dialog.focus_force()
@@ -277,28 +293,41 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
         font_semibold_14 = ("Arial", 14, "bold")
         font_regular_12 = ("Arial", 12)
 
-    dialog.geometry("400x150")
-    dialog.minsize(400, 150)
-    dialog.resizable(False, False)
-    dialog.center_window()
+    # Create main content frame
+    content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    content_frame.columnconfigure(0, weight=1)
+    content_frame.rowconfigure(0, weight=1) # Label
+    content_frame.rowconfigure(1, weight=0) # Checkbox
+    content_frame.rowconfigure(2, weight=0) # Buttons
 
-    label = ctk.CTkLabel(dialog,
-                        text=f"Are you sure you want to delete the category '{folder_name}'?",
-                        font=font_semibold_14,
-                        wraplength=380)
-    label.pack(pady=(20, 10), padx=10)
+    label = ctk.CTkLabel(
+        content_frame,
+        text=f"Are you sure you want to delete the category '{folder_name}'?",
+        font=font_semibold_14,
+        wraplength=380,
+        justify="left"
+    )
+    label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
     checkbox_var = ctk.StringVar(value="0")
-    checkbox = ctk.CTkCheckBox(dialog,
-                               text="Don't ask again",
-                               variable=checkbox_var,
-                               onvalue="1", offvalue="0",
-                               checkbox_width=18, checkbox_height=18,
-                               font=font_regular_12)
-    checkbox.pack(pady=(15, 10))
+    checkbox = ctk.CTkCheckBox(
+        content_frame,
+        text="Don't ask again",
+        variable=checkbox_var,
+        onvalue="1", offvalue="0",
+        checkbox_width=18, checkbox_height=18,
+        font=font_regular_12
+    )
+    checkbox.grid(row=1, column=0, sticky="w", pady=(0, 15))
 
-    button_frame = ctk.CTkFrame(dialog, fg_color="#242424")
-    button_frame.pack(pady=10, fill='x')
+    button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+    button_frame.grid(row=2, column=0, sticky="ew")
+    button_frame.columnconfigure(0, weight=1)
+    button_frame.columnconfigure(1, weight=0)
+    button_frame.columnconfigure(2, weight=1)
+    button_frame.columnconfigure(3, weight=0)
+    button_frame.columnconfigure(4, weight=1)
 
     def on_yes():
         should_save_dont_show = checkbox_var.get() == "1"
@@ -310,36 +339,36 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
     def on_no():
         dialog.destroy()
 
-    yes_button = ctk.CTkButton(button_frame,
-                            text="Yes",
-                            width=80,
-                            font=font_semibold_12,
-                            command=on_yes)
-    yes_button.pack(side="left", padx=(100, 0), pady=10)
+    yes_button = ctk.CTkButton(
+        button_frame,
+        text="Yes",
+        width=80,
+        font=font_semibold_12,
+        command=on_yes
+    )
+    yes_button.grid(row=0, column=1, padx=10, pady=10)
 
-    no_button = ctk.CTkButton(button_frame,
-                            text="No",
-                            width=80,
-                            fg_color="#343638",
-                            hover_color="#2d2a2e",
-                            font=font_semibold_12,
-                            command=on_no)
-    no_button.pack(side="right", padx=(0, 100), pady=10)
+    no_button = ctk.CTkButton(
+        button_frame,
+        text="No",
+        width=80,
+        fg_color="#343638",
+        hover_color="#2d2a2e",
+        font=font_semibold_12,
+        command=on_no
+    )
+    no_button.grid(row=0, column=3, padx=10, pady=10)
 
+    # Set minimum size and update
     dialog.update_idletasks()
-
-    try:
-        req_width = label.winfo_reqwidth()
-        req_height = label.winfo_reqheight()
-        chk_height = checkbox.winfo_reqheight()
-        btn_height = button_frame.winfo_reqheight()
-        dialog.geometry(f"{max(400, req_width + 20)}x{req_height + chk_height + btn_height + 60}")
-    except Exception:
-        pass
+    min_width = max(380, label.winfo_reqwidth() + 40)
+    min_height = (label.winfo_reqheight() + checkbox.winfo_reqheight() + 
+                  button_frame.winfo_reqheight() + 80)
+    dialog.minsize(min_width, min_height)
+    dialog.resizable(False, False)
 
     dialog.protocol("WM_DELETE_WINDOW", on_no)
-
-    dialog.center_window() 
+    dialog.center_window(width=min_width, height=min_height)
     dialog.transient(parent_window)
     dialog.grab_set()
     dialog.lift()
@@ -353,11 +382,11 @@ def show_unsaved_changes_dialog(parent_window):
     """Shows a confirmation dialog for unsaved changes."""
     if not parent_window or not parent_window.winfo_exists():
         print("Error: show_unsaved_changes_dialog called with invalid parent window.")
-        return "cancel" # Default to cancel if parent is invalid
+        return "cancel"
 
     dialog = ToplevelIco(parent_window, APP_ICON)
     dialog.title("Unsaved Changes")
-    dialog.result = "cancel" # Default result if 'X' is clicked
+    dialog.result = "cancel"  # Default result
 
     try:
         font_semibold_12 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12)
@@ -367,33 +396,34 @@ def show_unsaved_changes_dialog(parent_window):
         font_semibold_12 = ("Arial", 12, "bold")
         font_semibold_14 = ("Arial", 14, "bold")
 
-    # --- Determine Scaling Factor ---
-    scale_factor = 1.0
-    if platform.system() == "Windows":
-        try:
-            scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
-        except Exception:
-            try: # Fallback using parent window if ctypes fails
-                scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(parent_window.winfo_id())
-            except Exception:
-                print(f"Error getting scaling factor: {e}")
+    # Create main content frame
+    content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    content_frame.columnconfigure(0, weight=1)
+    content_frame.rowconfigure(0, weight=1) # Label
+    content_frame.rowconfigure(1, weight=0) # Buttons
 
-    dialog.geometry("330x140")
-    dialog.minsize(330, 140)
-    dialog.resizable(False, False)
-    dialog.center_window()
+    # Message label
+    label = ctk.CTkLabel(
+        content_frame,
+        text="You have unsaved changes. What would you like to do?",
+        font=font_semibold_14,
+        wraplength=330,
+        justify="left"
+    )
+    label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
+    # Button frame
+    button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+    button_frame.grid(row=1, column=0, sticky="ew")
+    
+    button_frame.columnconfigure(0, weight=1)
+    button_frame.columnconfigure(1, weight=0)
+    button_frame.columnconfigure(2, weight=1)
+    button_frame.columnconfigure(3, weight=0)
+    button_frame.columnconfigure(4, weight=1)
 
-    label = ctk.CTkLabel(dialog,
-                        text="You have unsaved changes. What would you like to do?",
-                        font=font_semibold_14,
-                        wraplength=330)
-    label.pack(pady=(25, 15), padx=(16,10))
-
-    button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-    button_frame.pack(pady=(18,0), fill='x')
-
-    # --- Button Definitions ---
+    # Button callbacks
     def on_save():
         dialog.result = "save"
         dialog.destroy()
@@ -402,41 +432,39 @@ def show_unsaved_changes_dialog(parent_window):
         dialog.result = "discard"
         dialog.destroy()
 
-    def on_cancel(): # Treat 'X' as Cancel
+    def on_cancel():
         dialog.result = "cancel"
         dialog.destroy()
 
+    save_button = ctk.CTkButton(
+        button_frame,
+        text="Save",
+        width=80,
+        font=font_semibold_12,
+        command=on_save
+    )
+    save_button.grid(row=0, column=1, padx=10, pady=10)
 
-    save_button = ctk.CTkButton(button_frame,
-                                text="Save",
-                                width=80,
-                                font=font_semibold_12,
-                                command=on_save)
+    discard_button = ctk.CTkButton(
+        button_frame,
+        text="Discard",
+        width=80,
+        fg_color="#B04848",
+        hover_color="#8E3B3B",
+        font=font_semibold_12,
+        command=on_discard
+    )
+    discard_button.grid(row=0, column=3, padx=10, pady=10)
 
-    discard_button = ctk.CTkButton(button_frame,
-                                   text="Discard",
-                                   width=80,
-                                   fg_color="#B04848",
-                                   hover_color="#8E3B3B",
-                                   font=font_semibold_12,
-                                   command=on_discard)
-
-    # TEMPORARY UI FIX, WILL ADD LAYOUT FOR EACH SCALING LATER 100, 125 ...
-    if scale_factor == 1.0:
-        # Add more bottom padding to frame and space between buttons for 100% scaling
-        button_frame.pack(pady=(18, 10), fill='x') # Increased bottom padding
-        save_button.pack(side="left", padx=(90, 10), pady=10) # Reduced outer, added inner padding
-        discard_button.pack(side="right", padx=(10, 90), pady=10) # Reduced outer, added inner padding
-    else:
-        # Default padding for other scaling factors
-        button_frame.pack(pady=(18, 0), fill='x')
-        save_button.pack(side="left", padx=(100, 0), pady=10)
-        discard_button.pack(side="right", padx=(0, 100), pady=10)
-
-    dialog.protocol("WM_DELETE_WINDOW", on_cancel) # Treat 'X' as Cancel
-
+    # Set minimum size and update
     dialog.update_idletasks()
-    dialog.center_window()
+    min_width = max(330, label.winfo_reqwidth() + 40)
+    min_height = label.winfo_reqheight() + button_frame.winfo_reqheight() + 80
+    dialog.minsize(min_width, min_height)
+    dialog.resizable(False, False)
+
+    dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+    dialog.center_window(width=min_width, height=min_height) 
     dialog.transient(parent_window)
     dialog.grab_set()
     dialog.lift()
@@ -465,7 +493,6 @@ def _select_and_set_folder_path(popup_to_close):
 
         # Close the popup that triggered this
         if popup_to_close and popup_to_close.winfo_exists():
-            # Use after(0, ...) to ensure this runs after the current event handling
             popup_to_close.after(0, popup_to_close.destroy)
 
         # Reset global references if the popup being closed is one of the tracked ones
@@ -473,7 +500,7 @@ def _select_and_set_folder_path(popup_to_close):
         if popup_to_close == path_popup_window:
             path_popup_window = None
         elif popup_to_close == standalone_popup_window:
-            standalone_popup_window = None # Should already be handled by finally, but belt-and-suspenders
+            standalone_popup_window = None
 
 def _destroy_standalone_popup():
     """Safely destroys the standalone popup window if it exists."""
@@ -499,32 +526,86 @@ def path_prompt_popup(message):
                 if popup_instance and popup_instance.winfo_exists():
                     popup_instance.destroy()
                 path_popup_window = None
-
+        
         popup_instance.title("Path Not Set")
-        popup_instance.geometry("350x130")
         popup_instance.resizable(False, False)
         popup_instance.iconbitmap(APP_ICON)
         popup_instance.protocol("WM_DELETE_WINDOW", on_popup_quit)
+    
+        content_frame = ctk.CTkFrame(popup_instance, fg_color="transparent")
+        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.rowconfigure(0, weight=1)  # Label row
+        content_frame.rowconfigure(1, weight=0)  # Button frame row
+    
+        # --- Use standard font creation ---
+        try:
+            # Use CTkFont for consistency
+            font_semibold_14 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=14)
+            font_semibold_12 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12)
+        except Exception as e:
+            print(f"Error creating CTkFont objects: {e}")
+            # Fallback fonts
+            font_semibold_14 = ("Arial", 14, "bold")
+            font_semibold_12 = ("Arial", 12, "bold")
+    
+        # --- Message label ---
+        label = ctk.CTkLabel(
+            content_frame, 
+            text=message, 
+            font=font_semibold_14,
+            wraplength=380, 
+            justify="left" 
+        )
+        label.grid(row=0, column=0, sticky="nsew", pady=(0, 15)) 
+    
+        button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        button_frame.grid(row=1, column=0, sticky="ew")
+        button_frame.columnconfigure(0, weight=1)  
+    
+        # --- Set button ---
+        set_button = ctk.CTkButton(
+            button_frame, 
+            text="Set", 
+            width=80,
+            font=font_semibold_12,
+            command=lambda: _select_and_set_folder_path(popup_instance)
+        )
+        set_button.grid(row=0, column=0, pady=10) 
+    
 
-        label = ctk.CTkLabel(popup_instance, text=message, font=("Cascadia Code SemiBold", 13))
-        label.pack(pady=(20,15))
-        set_button = ctk.CTkButton(popup_instance, text="Set", width=50, font=("Cascadia Code SemiBold", 12),
-                                   command=lambda: _select_and_set_folder_path(popup_instance))
-        set_button.pack(pady=10, anchor="center")
+        popup_instance.update_idletasks()
+        
+        label_req_w = label.winfo_reqwidth()
+        label_req_h = label.winfo_reqheight()
+        button_req_h = set_button.winfo_reqheight()
+        
+        min_width = max(380, label_req_w + 40) 
+        min_height = label_req_h + button_req_h + 80
+
+        popup_instance.minsize(min_width, min_height)
+        popup_instance.update_idletasks()
+        popup_instance.geometry(f"{min_width}x{min_height}") 
+        popup_instance.update_idletasks()
+
+        return min_width, min_height 
 
     if app and app.winfo_exists():
         if path_popup_window and path_popup_window.winfo_exists():
              path_popup_window.after(0, path_popup_window.focus_force)
              return
+        
         path_popup_window = ToplevelIco(app, APP_ICON)
-        setup_popup(path_popup_window, message)
 
-        path_popup_window.update_idletasks() # ensure size is calculated
-        path_popup_window.center_window() # center relative to parent (app)
+        popup_min_width, popup_min_height = setup_popup(path_popup_window, message)
+        path_popup_window.update_idletasks() 
+        path_popup_window.center_window(width=popup_min_width, height=popup_min_height) 
+        path_popup_window.update_idletasks()
         path_popup_window.transient(app)
         path_popup_window.grab_set()
         path_popup_window.lift()
         path_popup_window.focus_force()
+        app.wait_window(path_popup_window)
 
     else: # Main app doesn't exist, handle standalone
         if standalone_popup_window and standalone_popup_window.winfo_exists():
@@ -541,9 +622,7 @@ def path_prompt_popup(message):
             global standalone_popup_window
             try:
                 standalone_popup_window = ctk.CTk()
-                setup_popup(standalone_popup_window, message) # Setup content 
-
-                # Ensure widgets are created and size is measurable
+                popup_min_width, popup_min_height = setup_popup(standalone_popup_window, message)
                 standalone_popup_window.update_idletasks()
 
                 # get Scaling Factor
@@ -556,14 +635,15 @@ def path_prompt_popup(message):
                     except Exception as e:
                         print(f"Standalone Popup: Could not get scale factor via ctypes: {e}. Falling back to 1.0.")
 
-
-                # get window size and screen size
-                width = standalone_popup_window.winfo_reqwidth()
-                height = standalone_popup_window.winfo_reqheight()
+                # get screen size
                 screen_width = standalone_popup_window.winfo_screenwidth()
                 screen_height = standalone_popup_window.winfo_screenheight()
 
-                # Apply scaling factor to window width and height
+                # Use the dimensions returned by setup_popup
+                width = popup_min_width
+                height = popup_min_height
+
+                # Apply scaling factor to window width and height for position calculation
                 actual_width = int(width * scale_factor)
                 actual_height = int(height * scale_factor)
 
@@ -571,9 +651,10 @@ def path_prompt_popup(message):
                 x = (screen_width // 2) - (actual_width // 2)
                 y = (screen_height // 2) - (actual_height // 2)
 
-                # Set final geometry (size and position) 
-                standalone_popup_window.geometry(f'{width}x{height}+{x}+{y}')
-
+                # Set final geometry
+                final_geom = f'{width}x{height}+{x}+{y}'
+                standalone_popup_window.geometry(final_geom)
+                standalone_popup_window.update_idletasks()
                 standalone_popup_window.lift()
                 standalone_popup_window.focus_force()
                 standalone_popup_window.mainloop()
