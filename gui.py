@@ -1,4 +1,4 @@
-import sys
+# region imports/inits
 import ctypes
 import platform 
 
@@ -31,6 +31,63 @@ app = None                     # Main configuration window (CTk)
 path_popup_window = None       # Transient popup window (ToplevelIco, child)
 standalone_popup_window = None # Standalone popup window (CTk, own thread)
 standalone_popup_thread = None # Thread for the standalone popup
+
+# --- Global Font Dictionary - Initialized with Fallbacks ---
+FONTS = {
+    'regular_9': ("Arial", 9),
+    'regular_11': ("Arial", 11),
+    'regular_12': ("Arial", 12),
+    'semibold_11': ("Arial", 11, "bold"),
+    'semibold_12': ("Arial", 12, "bold"),
+    'semibold_13': ("Arial", 13, "bold"),
+    'semibold_14': ("Arial", 14, "bold"),
+    'confirmation_regular_12': ("Arial", 12),
+}
+_app_fonts_initialized = False
+
+def initialize_app_fonts():
+    """
+    Tries to initialize the global FONTS dictionary with CTkFont objects.
+    Should be called after a root ctk window is available.
+    """
+    global FONTS, _app_fonts_initialized
+    # Only attempt if not already successfully initialized with CTkFont objects
+    # or if the current fonts are still tuples (indicating fallback)
+    if not _app_fonts_initialized or isinstance(FONTS.get('regular_9'), tuple):
+        print("Attempting to initialize CTkFont objects...")
+        try:
+            # Ensure REGULAR_FONT and SEMIBOLD_FONT are valid font objects
+            # from which getname() can be called. This assumes they are loaded
+            # correctly by config_manager.
+            if REGULAR_FONT is None or SEMIBOLD_FONT is None:
+                print("Warning: REGULAR_FONT or SEMIBOLD_FONT not loaded. Cannot create CTkFont objects.")
+                _app_fonts_initialized = False # Mark as failed if base fonts are missing
+                return
+
+            created_fonts = {
+                'regular_9': ctk.CTkFont(family=REGULAR_FONT.getname()[0], size=9),
+                'regular_11': ctk.CTkFont(family=REGULAR_FONT.getname()[0], size=11),
+                'regular_12': ctk.CTkFont(family=REGULAR_FONT.getname()[0], size=12),
+                'semibold_11': ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=11),
+                'semibold_12': ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12),
+                'semibold_13': ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=13),
+                'semibold_14': ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=14),
+            }
+            # Use the newly created CTkFont for confirmation_regular_12 if regular_12 was created
+            created_fonts['confirmation_regular_12'] = created_fonts.get('regular_12', FONTS['confirmation_regular_12'])
+            
+            FONTS.update(created_fonts) # Update the global dictionary
+            _app_fonts_initialized = True
+            print("CTkFont objects initialized successfully.")
+        except AttributeError as ae:
+            # This can happen if REGULAR_FONT.getname() fails because the font wasn't loaded
+            print(f"Note: AttributeError during CTkFont creation (likely font not loaded by FontManager) - {ae}. Using fallback tuple fonts.")
+            _app_fonts_initialized = False
+        except Exception as e:
+            _app_fonts_initialized = False # Failed to init with CTkFont
+            # FONTS will retain its tuple-based fallbacks
+            print(f"Note: Error creating CTkFont objects - {e}. Using fallback tuple fonts.")
+# endregion
 
 
 # region custom CTkToplevel
@@ -125,14 +182,6 @@ def show_error_dialog(parent_window, message):
     dialog = ToplevelIco(parent_window, APP_ICON)
     dialog.title("Error")
 
-    try:
-        ctk_font_semibold_12 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12)
-        ctk_font_semibold_14 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=14)
-    except Exception as e:
-        print(f"Error creating CTkFont objects: {e}")
-        ctk_font_semibold_12 = None
-        ctk_font_semibold_14 = None
-
     # Create main content frame with padding
     content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
     content_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -143,9 +192,9 @@ def show_error_dialog(parent_window, message):
     label = ctk.CTkLabel(
         content_frame,
         text=message,
-        font=ctk_font_semibold_14,
+        font=FONTS['semibold_14'],
         wraplength=380,
-        justify="left"
+        # justify="left"
     )
     label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
@@ -160,7 +209,7 @@ def show_error_dialog(parent_window, message):
         button_frame,
         text="OK",
         width=80,
-        font=ctk_font_semibold_12,
+        font=FONTS['semibold_12'],
         command=on_ok
     )
     ok_button.grid(row=0, column=0, pady=10)
@@ -191,13 +240,6 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
     dialog.title("Folder Already Exists")
     dialog.result = False  # Default result
 
-    try:
-        ctk_font_semibold_12 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12)
-        ctk_font_semibold_14 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=14)
-    except Exception as e:
-        print(f"Error creating CTkFont objects: {e}")
-        ctk_font_semibold_12 = None
-        ctk_font_semibold_14 = None
 
     # Create main content frame with padding
     content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -210,9 +252,9 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
     label = ctk.CTkLabel(
         content_frame,
         text=f"Folder '{folder_name}' already exists in the list.",
-        font=ctk_font_semibold_14,
+        font=FONTS['semibold_14'],
         wraplength=380,
-        justify="left"
+        # justify="left"
     )
     label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
@@ -239,7 +281,7 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
         button_frame,
         text="Use Same Folder",
         width=120,
-        font=ctk_font_semibold_12,
+        font=FONTS['semibold_12'],
         command=use_same_folder
     )
     use_button.grid(row=0, column=1, padx=10, pady=10)
@@ -250,7 +292,7 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
         width=80,
         fg_color="#343638",
         hover_color="#2d2a2e",
-        font=ctk_font_semibold_12,
+        font=FONTS['semibold_12'],
         command=rename
     )
     rename_button.grid(row=0, column=3, padx=10, pady=10)
@@ -283,16 +325,6 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
     dialog = ToplevelIco(parent_window, APP_ICON)
     dialog.title("Confirm Delete")
 
-    try:
-        font_semibold_12 = ("Cascadia Code SemiBold", 12)
-        font_semibold_14 = ("Cascadia Code SemiBold", 14)
-        font_regular_12 = ("Cascadia Code", 12)
-    except Exception as e:
-        print(f"Error creating Font objects: {e}")
-        font_semibold_12 = ("Arial", 12, "bold")
-        font_semibold_14 = ("Arial", 14, "bold")
-        font_regular_12 = ("Arial", 12)
-
     # Create main content frame
     content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
     content_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -304,9 +336,9 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
     label = ctk.CTkLabel(
         content_frame,
         text=f"Are you sure you want to delete the category '{folder_name}'?",
-        font=font_semibold_14,
+        font=FONTS['semibold_14'],
         wraplength=380,
-        justify="left"
+        # justify="left"
     )
     label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
@@ -317,7 +349,7 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
         variable=checkbox_var,
         onvalue="1", offvalue="0",
         checkbox_width=18, checkbox_height=18,
-        font=font_regular_12
+        font=FONTS['semibold_12']
     )
     checkbox.grid(row=1, column=0, sticky="w", pady=(0, 15))
 
@@ -343,7 +375,7 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
         button_frame,
         text="Yes",
         width=80,
-        font=font_semibold_12,
+        font=FONTS['semibold_12'],
         command=on_yes
     )
     yes_button.grid(row=0, column=1, padx=10, pady=10)
@@ -354,7 +386,7 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
         width=80,
         fg_color="#343638",
         hover_color="#2d2a2e",
-        font=font_semibold_12,
+        font=FONTS['semibold_12'],
         command=on_no
     )
     no_button.grid(row=0, column=3, padx=10, pady=10)
@@ -388,14 +420,6 @@ def show_unsaved_changes_dialog(parent_window):
     dialog.title("Unsaved Changes")
     dialog.result = "cancel"  # Default result
 
-    try:
-        font_semibold_12 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12)
-        font_semibold_14 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=14)
-    except Exception as e:
-        print(f"Error creating CTkFont objects: {e}")
-        font_semibold_12 = ("Arial", 12, "bold")
-        font_semibold_14 = ("Arial", 14, "bold")
-
     # Create main content frame
     content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
     content_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -407,9 +431,9 @@ def show_unsaved_changes_dialog(parent_window):
     label = ctk.CTkLabel(
         content_frame,
         text="You have unsaved changes. What would you like to do?",
-        font=font_semibold_14,
+        font=FONTS['semibold_14'],
         wraplength=330,
-        justify="left"
+        # justify="left"
     )
     label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
@@ -440,7 +464,7 @@ def show_unsaved_changes_dialog(parent_window):
         button_frame,
         text="Save",
         width=80,
-        font=font_semibold_12,
+        font=FONTS['semibold_12'],
         command=on_save
     )
     save_button.grid(row=0, column=1, padx=10, pady=10)
@@ -451,7 +475,7 @@ def show_unsaved_changes_dialog(parent_window):
         width=80,
         fg_color="#B04848",
         hover_color="#8E3B3B",
-        font=font_semibold_12,
+        font=FONTS['semibold_12'],
         command=on_discard
     )
     discard_button.grid(row=0, column=3, padx=10, pady=10)
@@ -538,24 +562,13 @@ def path_prompt_popup(message):
         content_frame.rowconfigure(0, weight=1)  # Label row
         content_frame.rowconfigure(1, weight=0)  # Button frame row
     
-        # --- Use standard font creation ---
-        try:
-            # Use CTkFont for consistency
-            font_semibold_14 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=14)
-            font_semibold_12 = ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12)
-        except Exception as e:
-            print(f"Error creating CTkFont objects: {e}")
-            # Fallback fonts
-            font_semibold_14 = ("Arial", 14, "bold")
-            font_semibold_12 = ("Arial", 12, "bold")
-    
         # --- Message label ---
         label = ctk.CTkLabel(
             content_frame, 
             text=message, 
-            font=font_semibold_14,
+            font=FONTS['semibold_14'],
             wraplength=380, 
-            justify="left" 
+            # justify="left" 
         )
         label.grid(row=0, column=0, sticky="nsew", pady=(0, 15)) 
     
@@ -568,7 +581,7 @@ def path_prompt_popup(message):
             button_frame, 
             text="Set", 
             width=80,
-            font=font_semibold_12,
+            font=FONTS['semibold_12'],
             command=lambda: _select_and_set_folder_path(popup_instance)
         )
         set_button.grid(row=0, column=0, pady=10) 
@@ -622,6 +635,7 @@ def path_prompt_popup(message):
             global standalone_popup_window
             try:
                 standalone_popup_window = ctk.CTk()
+                initialize_app_fonts() 
                 popup_min_width, popup_min_height = setup_popup(standalone_popup_window, message)
                 standalone_popup_window.update_idletasks()
 
@@ -778,14 +792,13 @@ def process_extensions_string(extensions_str):
 
 # region CategoryRow
 class CategoryRow(ctk.CTkFrame):
-    def __init__(self, master, config_window, folder_name, extensions, fonts, delete_icon):
+    def __init__(self, master, config_window, folder_name, extensions, delete_icon):
         super().__init__(master)
         self.pack(fill="x", padx=2, pady=0) # expand row horizontally
 
         self.config_window = config_window
         self.original_folder = folder_name
         self.original_extensions_str = ', '.join(extensions)
-        self.fonts = fonts
         self.delete_icon = delete_icon
         self.is_dirty = False # to track unsaved changes
 
@@ -795,10 +808,10 @@ class CategoryRow(ctk.CTkFrame):
 
         self.folder_entry_var = ctk.StringVar(value=self.original_folder)
 
-        self.folder_entry = ctk.CTkEntry(label_frame, font=self.fonts['regular_12'], textvariable=self.folder_entry_var)
-        self.folder_entry.pack(expand=True, fill="both", padx=5, pady=5) # fill="both" is fine here
+        self.folder_entry = ctk.CTkEntry(label_frame, font=FONTS['regular_12'], textvariable=self.folder_entry_var)
+        self.folder_entry.pack(expand=True, fill="both", padx=5, pady=5) 
 
-        self.extensions_textbox = ctk.CTkTextbox(self, height=60, font=self.fonts['regular_12'])
+        self.extensions_textbox = ctk.CTkTextbox(self, height=60, font=FONTS['regular_12'])
         self.extensions_textbox.pack(side="left", fill="x", expand=True, padx=(12,0), pady=5)
         self.extensions_textbox.insert("1.0", self.original_extensions_str)
 
@@ -814,12 +827,12 @@ class CategoryRow(ctk.CTkFrame):
         self.remove_button.place(relx=0.5, rely=0.5, anchor="center")
 
         self.save_button = ctk.CTkButton(self.button_frame, text="Save", width=30, height=25, fg_color="#343638",
-                                         hover_color='#253417', text_color='#94be6b', font=self.fonts['regular_9'],
+                                         hover_color='#253417', text_color='#94be6b', font=FONTS['regular_9'],
                                          command=self._handle_save_button_click)
         self.save_button.pack_forget()
 
         self.reset_button = ctk.CTkButton(self.button_frame, text="Reset", width=30, height=25, fg_color="#343638",
-                                          hover_color='#461505', text_color='#f06a3f', font=self.fonts['regular_9'],
+                                          hover_color='#461505', text_color='#f06a3f', font=FONTS['regular_9'],
                                           command=self.reset_fields)
         self.reset_button.pack_forget()
 
@@ -957,6 +970,7 @@ class CategoryRow(ctk.CTkFrame):
 class ConfigWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
+        initialize_app_fonts() 
         self.title("Configure Folder Sorter")
         self.iconbitmap(APP_ICON)
         self.resizable(True, True)
@@ -965,37 +979,26 @@ class ConfigWindow(ctk.CTk):
         # --- Load Config Early for Geometry ---
         saved_geometry = config.get("window_geometry")
 
-        # --- Font and Icon Setup ---
+        # --- Initialize delete_icon ---
         try:
-            self.fonts = {
-                'regular_9': ctk.CTkFont(family=REGULAR_FONT.getname()[0], size=9),
-                'regular_11': ctk.CTkFont(family=REGULAR_FONT.getname()[0], size=11),
-                'regular_12': ctk.CTkFont(family=REGULAR_FONT.getname()[0], size=12),
-                'semibold_12': ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=12),
-                'semibold_13': ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=13),
-                'semibold_14': ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=14),
-            }
             self.delete_icon = ctk.CTkImage(
                 light_image=Image.open(DELETE_PNG),
                 dark_image=Image.open(DELETE_PNG),
-                size=(10,10)
+                size=(10, 10)
             )
         except Exception as e:
-            print(f"Error creating CTkFont objects or loading image: {e}")
-            sys.exit(1)
+            print(f"Error loading delete image: {e}")
+            self.delete_icon = None
 
         # --- Build UI Elements ---
         self._build_path_frame()
         self._build_add_frame()
-        self._build_scrollable_frame()
+        self._build_scrollable_frame() 
 
-        # --- Set Initial Geometry ---
-        self.update_idletasks()
-
+        # --- Set Initial Geometry & Minimum Size ---
         geometry_applied = False
         if saved_geometry:
             try:
-                # validity check
                 if isinstance(saved_geometry, str) and 'x' in saved_geometry and '+' in saved_geometry:
                     self.geometry(saved_geometry)
                     print(f"Applied saved geometry: {saved_geometry}")
@@ -1006,22 +1009,26 @@ class ConfigWindow(ctk.CTk):
                 print(f"Error applying saved geometry '{saved_geometry}': {e}. Falling back to centering.")
 
         if not geometry_applied:
-            # No saved geometry or it was invalid, center the window on first launch/error
             print("No valid saved geometry found. Centering window.")
-            self._center_window_fallback() # Use centering instead
+            self._center_window_fallback()
 
-        # --- Set Minimum window Size ---
         min_width = 547
         min_height = 334
         self.minsize(min_width, min_height)
 
+        # --- Force update of main window geometry before populating scrollable frame ---
+        self.update_idletasks() 
+
         # --- Setup callbacks for cross-thread gui function calls ---
         file_sorter.set_gui_callbacks(
-            self, # Pass the ConfigWindow instance
-            lambda msg: show_error_dialog(self, msg), # Function to show error dialogs
-            self.focus_app # Function to bring the window to the front
+            self, 
+            lambda msg: show_error_dialog(self, msg), 
+            self.focus_app 
         )
-        self.render_scrollable_widget()
+
+        # --- Defer initial rendering of scrollable content ---
+        self.after_idle(self.render_scrollable_widget) 
+
         self.lift()
         self.focus_app()
 
@@ -1196,7 +1203,7 @@ class ConfigWindow(ctk.CTk):
         print("Performing quit...") # Added print
 
         # --- Clear References ---
-        # References are cleared here, AFTER geometry is saved in on_app_quit
+        # References are cleared after geometry is saved in on_app_quit
         if app is self:
             app = None
         if file_sorter.gui_app_instance is self:
@@ -1233,10 +1240,10 @@ class ConfigWindow(ctk.CTk):
         path_frame = ctk.CTkFrame(self)
         path_frame.pack(fill="x", padx=10, pady=10)
 
-        path_label = ctk.CTkLabel(path_frame, text="Folder Path:", font=self.fonts['semibold_14'])
+        path_label = ctk.CTkLabel(path_frame, text="Folder Path:", font=FONTS['semibold_14'])
         path_label.pack(side="left", padx=(10, 5), pady=7)
 
-        self.path_entry = ctk.CTkEntry(path_frame, font=self.fonts['regular_11'])
+        self.path_entry = ctk.CTkEntry(path_frame, font=FONTS['semibold_11'])
         self.path_entry.pack(side="left", fill="x", expand=True, padx=5, pady=7)
         self.path_entry.configure(state='disabled')
 
@@ -1244,7 +1251,7 @@ class ConfigWindow(ctk.CTk):
                                   x_offset=-5, y_offset=20, alpha=0.87, font=('Cascadia Code', 12))
         self.refresh_path_entry(config.get('folder_path', ''))
 
-        browse_button = ctk.CTkButton(path_frame, text="Browse", width=12, font=self.fonts['regular_12'], command=self.select_folder)
+        browse_button = ctk.CTkButton(path_frame, text="Browse", width=12, font=FONTS['semibold_12'], command=self.select_folder)
         browse_button.pack(side="right", padx=(7,8), pady=7)
 
 
@@ -1284,18 +1291,18 @@ class ConfigWindow(ctk.CTk):
         add_frame.pack(fill="x", padx=10, pady=(0,13)) 
         add_frame.columnconfigure(1, weight=1)
 
-        new_category_label = ctk.CTkLabel(add_frame, text="New Category Name:", font=self.fonts['semibold_13'])
+        new_category_label = ctk.CTkLabel(add_frame, text="New Category Name:", font=FONTS['semibold_13'])
         new_category_label.grid(row=0, column=0, sticky="w", padx=(10, 5), pady=7)
-        self.new_category_entry = ctk.CTkEntry(add_frame, height=25, font=self.fonts['regular_12'])
+        self.new_category_entry = ctk.CTkEntry(add_frame, height=25, font=FONTS['semibold_12'])
         # sticky="ew" makes the entry fill its grid cell horizontally
         self.new_category_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=7)
 
-        new_extensions_label = ctk.CTkLabel(add_frame, text="Extensions (comma separated):", font=self.fonts['semibold_13'])
+        new_extensions_label = ctk.CTkLabel(add_frame, text="Extensions (comma separated):", font=FONTS['semibold_13'])
         new_extensions_label.grid(row=1, column=0, sticky="w", padx=(10, 5), pady=7)
-        self.new_extensions_entry = ctk.CTkEntry(add_frame, height=25, font=self.fonts['regular_12'])
+        self.new_extensions_entry = ctk.CTkEntry(add_frame, height=25, font=FONTS['semibold_12'])
         self.new_extensions_entry.grid(row=1, column=1, sticky="ew", padx=5, pady=7)
 
-        add_button = ctk.CTkButton(add_frame, text="Add", width=6, font=self.fonts['regular_12'], command=self.add_category)
+        add_button = ctk.CTkButton(add_frame, text="Add", width=6, font=FONTS['semibold_12'], command=self.add_category)
         add_button.grid(row=2, column=1, sticky="e", padx=6, pady=(0,7))
 
     def add_category(self):
@@ -1340,12 +1347,13 @@ class ConfigWindow(ctk.CTk):
         header_frame.pack(fill="x", padx=5, pady=10)
         folders_frame = ctk.CTkFrame(header_frame, corner_radius=8, fg_color="#242424")
         folders_frame.pack(side="left", padx=(68, 0))
-        folders_label = ctk.CTkLabel(folders_frame, text="Folders", font=self.fonts['semibold_12'])
+        folders_label = ctk.CTkLabel(folders_frame, text="Folders", font=FONTS['semibold_12'])
         folders_label.pack(padx=7)
         extensions_frame = ctk.CTkFrame(header_frame, corner_radius=8, fg_color="#242424")
-        extensions_frame.pack(side="left", padx=(140, 0))
-        extensions_label = ctk.CTkLabel(extensions_frame, text="Extensions", font=self.fonts['semibold_12'])
+        extensions_frame.pack(side="left", padx=(140, 0)) # Adjusted based on your provided code
+        extensions_label = ctk.CTkLabel(extensions_frame, text="Extensions", font=FONTS['semibold_12'])
         extensions_label.pack(padx=7)
+
 
         # config should be loaded already
         sorted_folder_extensions = sorted(config['folder_extensions_mapping'].items(), key=lambda item: item[0].lower())
@@ -1357,11 +1365,11 @@ class ConfigWindow(ctk.CTk):
                 config_window=self,
                 folder_name=folder,
                 extensions=extensions,
-                fonts=self.fonts,
                 delete_icon=self.delete_icon
             )
+        
+        self.scrollable_frame.update_idletasks()
 # endregion
-
 
 # region run gui
 def launch_config_gui():
