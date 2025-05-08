@@ -54,38 +54,48 @@ def open_config_gui():
 
 def quit_app():
     """Quit the application and stop the tray icon"""
-    global tray_app, config_gui_thread
+    global tray_app, config_gui_thread # gui.standalone_popup_thread is managed within gui.py mostly
     print("Quit requested.")
 
-    # close the standalone popup window if it's running
+    # Close the standalone popup window if it's running
     if gui.standalone_popup_window and gui.standalone_popup_window.winfo_exists():
         print("Attempting to close standalone popup window...")
-        gui._destroy_standalone_popup() # Use the safe destroy function from gui.py
+        gui._destroy_standalone_popup() # This schedules destroy and sets gui.standalone_popup_window to None
 
-    # close the GUI window if it's running
+    # Close the main GUI window if it's running
     if gui.app and gui.app.winfo_exists():
-        print("Attempting to close GUI window...")
+        print("Attempting to schedule main GUI window destruction...")
         try:
+            # Schedule destroy; the GUI thread itself will handle cleanup including setting gui.app to None
             gui.app.after(0, gui.app.destroy)
         except Exception as e:
             print(f"Error scheduling GUI destroy: {e}")
-        finally:
-            gui.app = None
 
-    # Stop the tray icon
+    # Wait for the standalone popup thread to end
+    if gui.standalone_popup_thread and gui.standalone_popup_thread.is_alive():
+        print("Waiting for standalone popup thread to finish...")
+        gui.standalone_popup_thread.join(timeout=2.0)
+        if gui.standalone_popup_thread.is_alive():
+            print("Warning: Standalone popup thread did not finish in time.")
+        else:
+            print("Standalone popup thread finished.")
+    gui.standalone_popup_thread = None # Ensure reference is cleared
+
+    # Wait for the main config GUI thread to end
+    if config_gui_thread and config_gui_thread.is_alive():
+        print("Waiting for main GUI thread to finish...")
+        config_gui_thread.join(timeout=2.0) # Increased timeout
+        if config_gui_thread.is_alive():
+            print("Warning: Main GUI thread did not finish in time.")
+        else:
+            print("Main GUI thread finished.")
+    config_gui_thread = None # Ensure reference is cleared
+
+    # Stop the tray app
     if tray_app:
         print("Stopping tray icon...")
         tray_app.stop()
-
-    # Wait a bit for the GUI thread to end after destroy command
-    if gui.standalone_popup_thread and gui.standalone_popup_thread.is_alive():
-        print("Waiting briefly for standalone popup thread...")
-        gui.standalone_popup_thread.join(timeout=0.5)
-    # Same for config GUI thread
-    if config_gui_thread and config_gui_thread.is_alive():
-        print("Waiting briefly for GUI thread...")
-        config_gui_thread.join(timeout=0.5) 
-
+        
     print("Quit process finished.")
 
 
@@ -116,8 +126,7 @@ def setup_tray():
 def start_tray_thread():
     """Start the tray icon in a separate thread"""
     print("Starting tray thread...")
-    tray_thread = Thread(target=setup_tray)
-    tray_thread.daemon = False # Make it non-daemon so main thread waits for it
+    tray_thread = Thread(target=setup_tray, daemon=True)
     tray_thread.start()
     return tray_thread
 

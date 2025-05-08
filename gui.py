@@ -351,7 +351,7 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
         checkbox_width=18, checkbox_height=18,
         font=FONTS['semibold_12']
     )
-    checkbox.grid(row=1, column=0, sticky="w", pady=(0, 15))
+    checkbox.grid(row=1, column=0, pady=(0, 15))
 
     button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
     button_frame.grid(row=2, column=0, sticky="ew")
