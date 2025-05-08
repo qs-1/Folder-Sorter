@@ -628,11 +628,12 @@ def path_prompt_popup(message):
                 print(f"Error scheduling focus for standalone popup: {e}")
             return
         if standalone_popup_thread and standalone_popup_thread.is_alive():
-            print("Standalone popup thread already running.")
+            print("Standalone popup thread already running. Preventing new popup.")
             return
 
         def _standalone_popup_target():
             global standalone_popup_window
+
             try:
                 standalone_popup_window = ctk.CTk()
                 initialize_app_fonts() 
@@ -643,7 +644,6 @@ def path_prompt_popup(message):
                 scale_factor = 1.0
                 if platform.system() == "Windows":
                     try:
-                        # Use ctypes to get primary monitor scaling
                         scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
                         print(f"Standalone Popup: Detected Windows Scale Factor: {scale_factor}")
                     except Exception as e:
@@ -671,11 +671,17 @@ def path_prompt_popup(message):
                 standalone_popup_window.update_idletasks()
                 standalone_popup_window.lift()
                 standalone_popup_window.focus_force()
+                
+                print("Starting standalone popup mainloop.")
                 standalone_popup_window.mainloop()
 
-            finally: # Cleanup
-                standalone_popup_window = None
-                print("Standalone popup closed.")
+            except Exception as e:
+                print(f"Error during _standalone_popup_target execution: {e}")
+            finally: # Cleanup for this thread
+                print("Standalone popup mainloop ended.")
+                # Ensure standalone_popup_window is None if this thread exits,
+                if standalone_popup_window is not None:
+                    standalone_popup_window = None
 
         print("Starting standalone popup thread.")
         standalone_popup_thread = Thread(target=_standalone_popup_target, daemon=True)
@@ -1374,15 +1380,45 @@ class ConfigWindow(ctk.CTk):
 # region run gui
 def launch_config_gui():
     """Launches the main configuration GUI window."""
-    global app
+    global app, standalone_popup_window, standalone_popup_thread
+
     if app and app.winfo_exists():
         print("Config window already open. Focusing.")
         app.focus_app()
         return app
 
+    # If standalone path prompt popup is active or its thread is running, ensure it's closed and thread terminated
+    popup_was_active = False
+    if standalone_popup_window is not None:
+        popup_was_active = True
+        print("Standalone popup window object exists. Attempting to close.")
+        _destroy_standalone_popup() # standalone_popup_window to None
+
+    if standalone_popup_thread is not None and standalone_popup_thread.is_alive():
+        popup_was_active = True
+        print("Standalone popup thread is alive. Waiting for it to close...")
+        standalone_popup_thread.join(timeout=3.0)
+        if standalone_popup_thread.is_alive():
+            print("Warning: Standalone popup thread did not close in time. Problems may occur.")
+        else:
+            print("Standalone popup thread successfully closed.")
+    
+    standalone_popup_thread = None
+
+    if popup_was_active:
+        print("Proceeding to launch config window after popup closure attempt.")
+
     print("Launching new config window.")
     config_window = ConfigWindow()
     app = config_window
-    config_window.mainloop()
+    
+    try:
+        config_window.mainloop()
+    finally:
+        # ensure 'app' is cleared if the mainloop exits unexpectedly 
+        if app is config_window and (not hasattr(config_window, '_w') or not config_window.winfo_exists()):
+            app = None
+            print("ConfigWindow mainloop exited, global 'app' reference cleared in launch_config_gui.")
+
     return config_window
 # endregion
