@@ -60,52 +60,110 @@ def sort_files():
     config_data = load_config()
     folder_path = config_data.get('folder_path', '')
 
-    # Check if the folder_path is valid
     if not folder_path or not path.exists(folder_path):
         return "Folder path is not set or does not exist" 
 
     folder_extensions_mapping = config_data.get('folder_extensions_mapping', {})
+    files_moved = False
+    failed_folder_creations = set() # Keep track of folders that failed to be created
 
-    files_moved = False # Flag to check if any file was actually moved
+    try:
+        source_files = listdir(folder_path)
+        if not source_files:
+            print(f"No files found in '{folder_path}' to sort.")
+            return None # Nothing to do
+    except OSError as e:
+        err_msg = f"Error reading source folder '{folder_path}': {str(e)}"
+        if show_error_dialog:
+            _schedule_on_gui_thread(show_error_dialog, err_msg)
+        else:
+            print(err_msg)
+        return f"Could not read source folder: {folder_path}"
 
-    for file in listdir(folder_path):
-        file_path = path.join(folder_path, file)
-        if not path.isfile(file_path):
+    print(f"Starting sort for {len(source_files)} items in '{folder_path}'...")
+
+    for original_filename in source_files:
+        file_path = path.join(folder_path, original_filename)
+
+        try:
+            if not path.isfile(file_path):
+                # print(f"Skipping non-file item: '{original_filename}'") # Debug
+                continue
+        except OSError as e:
+            print(f"Could not determine if '{original_filename}' is a file: {e}. Skipping.")
+            if show_error_dialog:
+                 _schedule_on_gui_thread(show_error_dialog, f"Error accessing '{original_filename}': {str(e)}. Skipping.")
             continue
 
-        # Check if file has an extension
-        if '.' in file:
-            file_extension = file.split('.')[-1]
-            for folder, ext_list in folder_extensions_mapping.items():
-                if file_extension.lower() in ext_list:
-                    target_folder_path = path.join(folder_path, folder)
-                    # --- This is the sufficient check ---
-                    if not path.exists(target_folder_path):
-                        try:
-                            makedirs(target_folder_path)
-                        except Exception as e:
-                             if show_error_dialog:
-                                _schedule_on_gui_thread(show_error_dialog, f"Error creating folder '{target_folder_path}': {str(e)}")
-                             continue # Skip moving this file if folder creation failed
+        # Process only files with extensions
+        if '.' in original_filename:
+            file_extension = original_filename.split('.')[-1].lower() # Normalize extension for comparison
+            
+            for category_folder_name, configured_extensions in folder_extensions_mapping.items():
+                normalized_configured_extensions = [ext.lower() for ext in configured_extensions]
 
-                    # Generate a unique filename if a file with the same name exists
-                    target_file_path = path.join(target_folder_path, file)
-                    if path.exists(target_file_path):
-                        file = generate_unique_filename(target_folder_path, file)
-                        target_file_path = path.join(target_folder_path, file)
+                if file_extension in normalized_configured_extensions:
+                    target_folder_path = path.join(folder_path, category_folder_name)
+                    # Normalize path for reliable checking in failed_folder_creations (OS-dependent case handling)
+                    normalized_target_folder_path_for_check = path.normcase(target_folder_path)
+
+                    if normalized_target_folder_path_for_check in failed_folder_creations:
+                        # If we already know we can't create this folder,
+                        # break from inner loop (categories), skip category
+                        print(f"Skipping category '{category_folder_name}' for '{original_filename}' as folder creation previously failed.")
+                        break 
 
                     try:
-                        move(file_path, target_file_path)
-                        files_moved = True # Mark that at least one file was moved
-                    except Exception as e:
+                        # Attempt to create the directory. exist_ok=True means no error if it already exists.
+                        makedirs(target_folder_path, exist_ok=True)
+                    except OSError as e:
+                        err_msg = f"Error creating folder '{target_folder_path}': {str(e)}. Files for this category will be skipped."
                         if show_error_dialog:
-                            # Schedule show_error_dialog call
-                            _schedule_on_gui_thread(show_error_dialog, f"Error moving file '{file}': {str(e)}")
-                    break # Move to next file in listdir once matched
+                            _schedule_on_gui_thread(show_error_dialog, err_msg)
+                        else:
+                            print(err_msg)
+                        failed_folder_creations.add(normalized_target_folder_path_for_check)
+                        break # Break from inner loop (categories), process next file
 
-    # Show Windows notification only if files were actually moved
+                    current_filename_to_move = original_filename
+                    destination_file_path = path.join(target_folder_path, current_filename_to_move)
+
+                    if path.exists(destination_file_path):
+                        current_filename_to_move = generate_unique_filename(target_folder_path, current_filename_to_move)
+                        destination_file_path = path.join(target_folder_path, current_filename_to_move)
+
+                    try:
+                        print(f"Attempting to move: '{file_path}' to '{destination_file_path}'")
+                        move(file_path, destination_file_path)
+                        files_moved = True
+                        print(f"Successfully moved: '{original_filename}' to '{destination_file_path}'")
+                    except OSError as e:
+                        err_msg = f"Error moving file '{original_filename}' to '{target_folder_path}': {str(e)}"
+                        if show_error_dialog:
+                            _schedule_on_gui_thread(show_error_dialog, err_msg)
+                        else:
+                            print(err_msg)
+                    except Exception as e: 
+                        err_msg = f"Unexpected error moving file '{original_filename}' to '{target_folder_path}': {str(e)}"
+                        if show_error_dialog:
+                            _schedule_on_gui_thread(show_error_dialog, err_msg)
+                        else:
+                            print(err_msg)
+                    
+                    # Once a file is matched and its move attempted (succeeded or failed),
+                    # break from the inner loop (iterating through folder_extensions_mapping)
+                    # and move to the next file in the source_files list.
+                    break 
+    
     if files_moved:
+        print("File sorting process completed. Some files were moved.")
         notification_thread = Thread(target=show_notification, args=(folder_path,))
+        notification_thread.daemon = True
         notification_thread.start()
+    else:
+        # No files matched any criteria, or all matched files failed to move,
+        # or the source_files list was empty initially
+        print("File sorting process completed. No files were moved.")
 
-    return None  # No error message, sorting was successful or no files needed moving
+
+    return None # successful sort

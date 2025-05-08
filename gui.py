@@ -690,88 +690,78 @@ def path_prompt_popup(message):
 
 
 # region validate input
-def validate_input(parent_window, folder_name, extensions, original_folder=None):
+def validate_input(folder_name, extensions, original_folder=None):
     """Validate folder name and extensions against the current config."""
     current_config = load_config()
-    folder_path = current_config.get('folder_path', '')
     mapping = current_config.get('folder_extensions_mapping', {})
 
     folder_name_stripped = folder_name.strip()
     if not folder_name_stripped:
         return False, "Folder name cannot be empty."
-
-    if folder_path and folder_name_stripped.strip('/') and path.exists(path.join(folder_path, folder_name_stripped)):
-        should_prompt = False
-        if original_folder is None:
-            should_prompt = True
-        elif original_folder is not None and folder_name_stripped.lower() != original_folder[0].lower():
-             should_prompt = True
-
-        if should_prompt:
-            use_same_folder = show_folder_exists_dialog(parent_window, folder_path, folder_name_stripped)
-            if not use_same_folder:
-                return None, ""
-
+    
     from config_manager import reserved_names
 
-    invalid_folder_chars_pattern = compile(r'[\\:*?"<>|]')
+    invalid_folder_chars_pattern = compile(r'[\\:*?"<>|]') 
     invalid_extension_chars_pattern = compile(r'[\\/:*?"<>|]')
 
     if invalid_folder_chars_pattern.search(folder_name_stripped):
-        return False, f"Folder name '{folder_name_stripped}' contains invalid characters (\\:*?\"<>|)."
+        return False, f"Folder name '{folder_name_stripped}' contains invalid characters (e.g., \\:*?\"<>|)."
     if folder_name_stripped.upper() in reserved_names:
         return False, f"Folder name '{folder_name_stripped}' is a reserved name."
     if '//' in folder_name_stripped or '\\\\' in folder_name_stripped:
         return False, f"Folder name '{folder_name_stripped}' contains multiple consecutive slashes or backslashes."
-    if folder_name_stripped.strip('/') == '':
+    if folder_name_stripped.strip('/') == '': # Catches names like "/" or "///"
         return False, "Folder name cannot be just slashes."
     if folder_name_stripped.startswith('/') or folder_name_stripped.endswith('/'):
         return False, "Folder name cannot start or end with a slash."
     if folder_name_stripped.startswith('\\') or folder_name_stripped.endswith('\\'):
          return False, "Folder name cannot start or end with a backslash."
 
-    folder_name_lower = folder_name_stripped.lower()
-    for existing_folder in mapping:
-        existing_folder_lower = existing_folder.lower()
+    if folder_name_stripped == "." or folder_name_stripped == "..":
+        return False, f"Folder name cannot be '{folder_name_stripped}' as it's a special directory reference."
 
-        if original_folder is None:
-            if folder_name_lower == existing_folder_lower:
+    folder_name_lower = folder_name_stripped.lower()
+    for existing_folder_key_in_map in mapping: 
+        existing_folder_key_lower = existing_folder_key_in_map.lower()
+
+        if original_folder is None: # Adding a new category
+            if folder_name_lower == existing_folder_key_lower:
                 return False, f"Folder name '{folder_name_stripped}' already exists in the configuration."
-        else:
-            original_folder_lower = original_folder[0].lower()
-            if folder_name_lower == existing_folder_lower and existing_folder_lower != original_folder_lower:
-                return False, f"Folder name '{folder_name_stripped}' already exists in the configuration (used by '{existing_folder}')."
+        else: # Editing an existing category
+            original_folder_name_lower = original_folder.lower() 
+            if folder_name_lower == existing_folder_key_lower and existing_folder_key_lower != original_folder_name_lower:
+                return False, f"Folder name '{folder_name_stripped}' already exists (used by category '{existing_folder_key_in_map}')."
 
     # --- Extension validation ---
-    cleaned_extensions = [] # Keep track for cross-category check
+    processed_extensions_for_check = [] 
 
-    for ext in extensions:
-        ext_stripped = ext.strip().lstrip('.')
-        if not ext_stripped: continue # Skip empty entries
+    for ext_input in extensions: 
+        ext_stripped = ext_input.strip().lstrip('.')
+        if not ext_stripped: continue
 
-        # Basic character validation
         if invalid_extension_chars_pattern.search(ext_stripped):
-            return False, f"Extension '{ext_stripped}' contains invalid characters (\\/:*?\"<>|)."
+            return False, f"Extension '{ext_stripped}' contains invalid characters (e.g., \\/:*?\"<>|)."
         if ext_stripped.upper() in reserved_names:
             return False, f"Extension '{ext_stripped}' is a reserved name."
 
         ext_lower = ext_stripped.lower()
 
-        # Check against other existing categories
-        for existing_folder, existing_extensions in mapping.items():
-            existing_folder_lower = existing_folder.lower()
-            existing_extensions_lower = [e.lower().lstrip('.') for e in existing_extensions]
+        for existing_folder_name_in_map, existing_extensions_in_map in mapping.items():
+            existing_folder_name_in_map_lower = existing_folder_name_in_map.lower()
+            
+            normalized_existing_extensions = existing_extensions_in_map 
 
-            is_adding = original_folder is None
-            is_editing_different_category = not is_adding and existing_folder_lower != original_folder[0].lower()
+            is_adding_new_category = original_folder is None
+            is_editing_a_different_category = not is_adding_new_category and \
+                                              existing_folder_name_in_map_lower != original_folder.lower()
 
-            if (is_adding or is_editing_different_category) and ext_lower in existing_extensions_lower:
-                 return False, f"Extension '{ext_stripped}' is already assigned to folder '{existing_folder}'."
+            if (is_adding_new_category or is_editing_a_different_category) and \
+               ext_lower in normalized_existing_extensions:
+                 return False, f"Extension '{ext_stripped}' is already assigned to folder '{existing_folder_name_in_map}'."
+        
+        processed_extensions_for_check.append(ext_stripped)
 
-        cleaned_extensions.append(ext_stripped) # Add for cross-category check
-
-    # Check if at least one valid extension was provided
-    if not cleaned_extensions:
+    if not processed_extensions_for_check:
         return False, "At least one valid extension is required."
 
     return True, "" # Validation passed
@@ -898,8 +888,7 @@ class CategoryRow(ctk.CTkFrame):
         ordered_unique_extensions = process_extensions_string(new_extensions_str)
 
         # Use ordered_unique_extensions for validation
-        is_valid, error_message = validate_input(self.config_window, new_folder_name, ordered_unique_extensions, original_folder=(self.original_folder,))
-
+        is_valid, error_message = validate_input(new_folder_name, ordered_unique_extensions, original_folder=self.original_folder)
         if is_valid is None:
             return False
         if not is_valid:
@@ -1320,7 +1309,8 @@ class ConfigWindow(ctk.CTk):
         ordered_unique_extensions = process_extensions_string(extensions_input)
 
         # Use ordered_unique_extensions for validation
-        is_valid, error_message = validate_input(self, folder_name, ordered_unique_extensions)
+        is_valid, error_message = validate_input(folder_name, ordered_unique_extensions)
+        
         if is_valid is None: return
         if not is_valid:
             show_error_dialog(self, error_message)
