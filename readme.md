@@ -4,7 +4,6 @@ A Windows system tray app to automatically sort files into categorized subfolder
 
 > **⚠️ Disclaimer:** This app directly modifies your file system by moving files based on your configuration. Incorrect configuration or unintended use could lead to permanent changes in your directory structure. **Please use with caution and ensure your configuration is correct before sorting.** It's recommended to test on a non-critical folder first.
 
-**Note:** Currently Windows only due to `win11toast` notifications. Support for macOS and Linux soon.
 
 <div align="center">
   <a href="https://github.com/user-attachments/assets/afad11f3-0050-444c-8eb7-4bf614db6e1b"><img src="https://github.com/user-attachments/assets/afad11f3-0050-444c-8eb7-4bf614db6e1b" alt="Folder-Sorter-demo" border="0" width="549"></a>
