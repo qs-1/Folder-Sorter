@@ -1,6 +1,8 @@
 # region imports/inits
 import ctypes
 import platform 
+import os
+import subprocess
 
 # initial blurryness fix for Windows
 if platform.system() == "Windows": 
@@ -1230,55 +1232,90 @@ class ConfigWindow(ctk.CTk):
 
 
     def _build_path_frame(self):
-        """Creates the top frame for folder path selection."""
-        # config should be loaded already
+        """Creates the top frame for folder path selection (demo style)."""
         path_frame = ctk.CTkFrame(self)
         path_frame.pack(fill="x", padx=10, pady=10)
 
         path_label = ctk.CTkLabel(path_frame, text="Folder Path:", font=FONTS['semibold_14'])
-        path_label.pack(side="left", padx=(10, 5), pady=7)
+        path_label.pack(side="left", padx=(10, 8), pady=7)
 
-        self.path_entry = ctk.CTkEntry(path_frame, font=FONTS['semibold_11'])
-        self.path_entry.pack(side="left", fill="x", expand=True, padx=5, pady=7)
-        self.path_entry.configure(state='disabled')
+        path_display_frame = ctk.CTkFrame(
+            path_frame,
+            fg_color="#232323",
+            corner_radius=8,
+            width=320,
+            height=32
+        )
+        path_display_frame.pack_propagate(False)
+        path_display_frame.pack(side="left", fill="x", expand=True, pady=3)
 
-        self.tooltip = CTkToolTip(self.path_entry, message=config.get('folder_path', "No Path Set"),
-                                  x_offset=-5, y_offset=20, alpha=0.87, font=('Cascadia Code', 12))
-        self.refresh_path_entry(config.get('folder_path', ''))
+        self.path_display_label = ctk.CTkLabel(
+            path_display_frame,
+            text="No path set",
+            font=FONTS['regular_11'],
+            anchor="w",
+            cursor="hand2"
+        )
+        self.path_display_label.pack(side="left", fill="both", expand=True, padx=(6, 2), pady=7)
+        self.path_display_label.bind("<Button-1>", self._on_path_click)
 
-        browse_button = ctk.CTkButton(path_frame, text="Browse", width=12, font=FONTS['semibold_12'], command=self.select_folder)
-        browse_button.pack(side="right", padx=(7,8), pady=7)
+        self.path_tooltip = CTkToolTip(
+            self.path_display_label,
+            message="No Path Set. Click Browse to select.",
+            x_offset=-5, y_offset=20, alpha=0.87, font=FONTS['regular_12']
+        )
+
+        browse_button = ctk.CTkButton(
+            path_frame,
+            text="Browse",
+            width=12,
+            font=FONTS['semibold_12'],
+            command=self.select_folder
+        )
+        browse_button.pack(side="right", padx=(10,8), pady=7)
+
+        self.refresh_path_display(config.get('folder_path', ''))
 
 
-    def refresh_path_entry(self, new_path):
-        """Update the path entry with a new path"""
+    def refresh_path_display(self, new_path):
+        """Update the path display label and tooltip with a new path."""
+        display_text = new_path if new_path and path.isdir(new_path) else "No valid path set"
         if not new_path:
-            new_path = ""
+            display_text = "No path set"
+        tooltip_message = f"Click to open folder: {new_path}" if new_path and path.isdir(new_path) else "No Path Set. Click Browse to select."
+        if new_path and not path.isdir(new_path):
+            tooltip_message = f"Invalid path: {new_path}. Click Browse to select."
         try:
-            # Check if widget exists before configuring
-            if hasattr(self, 'path_entry') and self.path_entry.winfo_exists():
-                self.path_entry.configure(state='normal')
-                self.path_entry.delete(0, ctk.END)
-                self.path_entry.insert(0, new_path)
-                self.path_entry.configure(state='disabled')
-            if hasattr(self, 'tooltip') and self.tooltip: # Check tooltip exists
-                 self.tooltip.configure(message=new_path if new_path else "No Path Set")
+            if hasattr(self, 'path_display_label') and self.path_display_label.winfo_exists():
+                self.path_display_label.configure(text=display_text)
+            if hasattr(self, 'path_tooltip') and self.path_tooltip:
+                self.path_tooltip.configure(message=tooltip_message)
         except Exception as e:
-            print(f"Error refreshing path entry: {e}") # Log error
+            print(f"Error refreshing path display: {e}")
 
     def select_folder(self):
-        """Open folder selection dialog and update path"""
-        folder_path = ctk.filedialog.askdirectory()
-        if folder_path:
-            save_config(folder_path=folder_path)
-
-            global path_popup_window
-            if path_popup_window and path_popup_window.winfo_exists():
-                self.refresh_path_entry(folder_path)
-                path_popup_window.destroy()
-                path_popup_window = None
-            elif hasattr(self, 'path_entry') and self.path_entry.winfo_exists(): # Check if main window exists
-                self.refresh_path_entry(folder_path)
+        """Open folder selection dialog and update path display."""
+        folder_path_selected = ctk.filedialog.askdirectory()
+        if folder_path_selected:
+            save_config(folder_path=folder_path_selected)
+            self.refresh_path_display(folder_path_selected)
+    def _on_path_click(self, event=None):
+        current_path = config.get('folder_path')
+        if not current_path or not path.isdir(current_path):
+            tooltip_msg = "Path is not set."
+            if current_path:
+                tooltip_msg = f"Path is not a valid folder: {current_path}"
+            show_error_dialog(self, tooltip_msg)
+            return
+        try:
+            if platform.system() == "Windows":
+                os.startfile(current_path)
+            elif platform.system() == "Darwin":
+                subprocess.run(['open', current_path], check=True)
+            else:
+                subprocess.run(['xdg-open', current_path], check=True)
+        except Exception as e:
+            show_error_dialog(self, f"An error occurred while opening folder:\n{current_path}\n{e}")
 
     def _build_add_frame(self):
         """Creates the frame for adding new categories."""
