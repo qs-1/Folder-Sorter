@@ -1378,14 +1378,30 @@ class ConfigWindow(ctk.CTk):
         # Build Header
         header_frame = ctk.CTkFrame(self.scrollable_frame)
         header_frame.pack(fill="x", padx=5, pady=10)
+
         folders_frame = ctk.CTkFrame(header_frame, corner_radius=8, fg_color="#242424")
         folders_frame.pack(side="left", padx=(68, 0))
         folders_label = ctk.CTkLabel(folders_frame, text="Folders", font=FONTS['semibold_12'])
-        folders_label.pack(padx=7)
+        folders_label.pack(side="left", padx=(7,6))
+        CTkToolTip(folders_label,
+            message=(
+                "Folder name: The category for sorted files.\n"
+                "Example: 'Pictures', 'PDFs', 'Work Documents'\n"
+                "Use slashes to create subfolders, 'MS/docx' will create 'docx' inside 'MS'."
+            ),
+            x_offset=0, y_offset=20, alpha=0.92, font=FONTS['regular_11'])
+
         extensions_frame = ctk.CTkFrame(header_frame, corner_radius=8, fg_color="#242424")
-        extensions_frame.pack(side="left", padx=(140, 0)) # Adjusted based on your provided code
+        extensions_frame.pack(side="left", padx=(140, 0))
         extensions_label = ctk.CTkLabel(extensions_frame, text="Extensions", font=FONTS['semibold_12'])
-        extensions_label.pack(padx=7)
+        extensions_label.pack(side="left", padx=(7,6))
+        CTkToolTip(extensions_label,
+            message=(
+                "Extensions: Comma-separated list, no dots.\n"
+                "Example: jpg, png, pdf, docx\n"
+                "Spaces are ignored. Use only valid file extensions."
+            ),
+            x_offset=0, y_offset=20, alpha=0.92, font=FONTS['regular_11'])
 
 
         # config should be loaded already
