@@ -212,6 +212,9 @@ def show_error_dialog(parent_window, message):
         text="OK",
         width=80,
         font=FONTS['semibold_12'],
+        text_color="#13140e",
+        fg_color="#a3ab8a",
+        hover_color="#858e6e",
         command=on_ok
     )
     ok_button.grid(row=0, column=0, pady=10)
@@ -284,6 +287,9 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
         text="Use Same Folder",
         width=120,
         font=FONTS['semibold_12'],
+        text_color="#13140e",
+        fg_color="#a3ab8a",
+        hover_color="#858e6e",
         command=use_same_folder
     )
     use_button.grid(row=0, column=1, padx=10, pady=10)
@@ -378,6 +384,9 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
         text="Yes",
         width=80,
         font=FONTS['semibold_12'],
+        text_color="#13140e",
+        fg_color="#a3ab8a",
+        hover_color="#858e6e",
         command=on_yes
     )
     yes_button.grid(row=0, column=1, padx=10, pady=10)
@@ -467,6 +476,9 @@ def show_unsaved_changes_dialog(parent_window):
         text="Save",
         width=80,
         font=FONTS['semibold_12'],
+        text_color="#13140e",
+        fg_color="#a3ab8a",
+        hover_color="#858e6e",
         command=on_save
     )
     save_button.grid(row=0, column=1, padx=10, pady=10)
@@ -475,8 +487,9 @@ def show_unsaved_changes_dialog(parent_window):
         button_frame,
         text="Discard",
         width=80,
-        fg_color="#B04848",
-        hover_color="#8E3B3B",
+        text_color="#13140e",
+        fg_color="#E85555",
+        hover_color="#D04040",
         font=FONTS['semibold_12'],
         command=on_discard
     )
@@ -584,6 +597,9 @@ def path_prompt_popup(message):
             text="Set", 
             width=80,
             font=FONTS['semibold_12'],
+            text_color="#13140e",
+            fg_color="#a3ab8a",
+            hover_color="#858e6e",
             command=lambda: _select_and_set_folder_path(popup_instance)
         )
         set_button.grid(row=0, column=0, pady=10) 
@@ -1232,7 +1248,7 @@ class ConfigWindow(ctk.CTk):
 
 
     def _build_path_frame(self):
-        """Creates the top frame for folder path selection (demo style)."""
+        """Creates the top frame for folder path selection."""
         path_frame = ctk.CTkFrame(self)
         path_frame.pack(fill="x", padx=10, pady=10)
 
@@ -1254,7 +1270,8 @@ class ConfigWindow(ctk.CTk):
             text="No path set",
             font=FONTS['regular_11'],
             anchor="w",
-            cursor="hand2"
+            cursor="hand2",
+            text_color="#d8dcc7"
         )
         self.path_display_label.pack(side="left", fill="both", expand=True, padx=(6, 2), pady=7)
         self.path_display_label.bind("<Button-1>", self._on_path_click)
@@ -1270,21 +1287,27 @@ class ConfigWindow(ctk.CTk):
             text="Browse",
             width=12,
             font=FONTS['semibold_12'],
+            text_color="#13140e",
+            fg_color="#a3ab8a",
+            hover_color="#858e6e",
             command=self.select_folder
         )
         browse_button.pack(side="right", padx=(10,8), pady=7)
 
         self.refresh_path_display(config.get('folder_path', ''))
 
-
     def refresh_path_display(self, new_path):
         """Update the path display label and tooltip with a new path."""
-        display_text = new_path if new_path and path.isdir(new_path) else "No valid path set"
-        if not new_path:
-            display_text = "No path set"
-        tooltip_message = f"Click to open folder: {new_path}" if new_path and path.isdir(new_path) else "No Path Set. Click Browse to select."
-        if new_path and not path.isdir(new_path):
-            tooltip_message = f"Invalid path: {new_path}. Click Browse to select."
+        if new_path and path.isdir(new_path):
+            display_text = new_path
+            tooltip_message = f"Click to open folder: {new_path}"
+        elif new_path and not path.isdir(new_path):
+            display_text = "Invalid path - click to set"
+            tooltip_message = f"Invalid path: {new_path}. Click to browse for folder."
+        else:
+            display_text = "Click to set folder path"
+            tooltip_message = "No path set. Click to browse for folder."
+        
         try:
             if hasattr(self, 'path_display_label') and self.path_display_label.winfo_exists():
                 self.path_display_label.configure(text=display_text)
@@ -1293,19 +1316,18 @@ class ConfigWindow(ctk.CTk):
         except Exception as e:
             print(f"Error refreshing path display: {e}")
 
+
     def select_folder(self):
         """Open folder selection dialog and update path display."""
         folder_path_selected = ctk.filedialog.askdirectory()
         if folder_path_selected:
             save_config(folder_path=folder_path_selected)
             self.refresh_path_display(folder_path_selected)
+
     def _on_path_click(self, event=None):
         current_path = config.get('folder_path')
         if not current_path or not path.isdir(current_path):
-            tooltip_msg = "Path is not set."
-            if current_path:
-                tooltip_msg = f"Path is not a valid folder: {current_path}"
-            show_error_dialog(self, tooltip_msg)
+            self.select_folder()
             return
         try:
             if platform.system() == "Windows":
@@ -1334,7 +1356,16 @@ class ConfigWindow(ctk.CTk):
         self.new_extensions_entry = ctk.CTkEntry(add_frame, height=25, font=FONTS['semibold_12'])
         self.new_extensions_entry.grid(row=1, column=1, sticky="ew", padx=5, pady=7)
 
-        add_button = ctk.CTkButton(add_frame, text="Add", width=6, font=FONTS['semibold_12'], command=self.add_category)
+        add_button = ctk.CTkButton(
+            add_frame,
+            text="Add",
+            width=6,
+            font=FONTS['semibold_12'],
+            text_color="#13140e",
+            fg_color="#a3ab8a",
+            hover_color="#858e6e",
+            command=self.add_category
+        )
         add_button.grid(row=2, column=1, sticky="e", padx=6, pady=(0,7))
 
     def add_category(self):
