@@ -53,7 +53,8 @@ def show_notification(folder_path):
         f'Sorted: "{folder_path}"',
         buttons=buttons,
         audio={'silent': 'true'},
-        duration='short'
+        duration='short',
+        app_id='Folder Sorter'
     )
 
 def sort_files():
