@@ -1,4 +1,5 @@
 import sys
+import os
 from os import path
 from json import dump, load, JSONDecodeError
 from PIL import ImageFont
@@ -13,8 +14,21 @@ def resource_path(relative_path):
 
     return path.join(base_path, relative_path)
 
+def get_config_directory():
+    """Get the directory for storing config files"""
+    if os.name == 'nt':  # Windows
+        # Use AppData/Local
+        config_dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'FolderSorter')
+    else:  # Unix-like systems
+        # Use ~/.config
+        config_dir = os.path.join(os.path.expanduser('~'), '.config', 'FolderSorter')
+    
+    # Create directory if it doesn't exist
+    os.makedirs(config_dir, exist_ok=True)
+    return config_dir
+
 # Define constants for file paths
-CONFIG_FILE = resource_path('config.json')
+CONFIG_FILE = os.path.join(get_config_directory(), 'config.json')
 APP_ICON = resource_path('icons/purp-sort.ico')
 DELETE_PNG = resource_path('icons/x.png')
 
@@ -61,12 +75,16 @@ def save_config(folder_path=None, folder_extensions_mapping=None, duplicates_che
     try:
         # Ensure config is not None before saving
         if config is not None:
+            config_dir = os.path.dirname(CONFIG_FILE)
+            os.makedirs(config_dir, exist_ok=True) # Create dir if it doesn't exist 
+            
             with open(CONFIG_FILE, 'w') as f:
-                dump(config, f, indent=4) 
+                dump(config, f, indent=4)
+            print(f"Config saved successfully to: {CONFIG_FILE}")
         else:
             print("Error: Config is None, cannot save.")
     except IOError as e:
-        print(f"Error saving config: {e}")
+        print(f"Error saving config to {CONFIG_FILE}: {e}")
     except TypeError as e:
         print(f"Error serializing config to JSON: {e}")
 
