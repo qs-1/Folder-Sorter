@@ -45,7 +45,7 @@ A Windows system tray app to automatically sort files into categorized subfolder
   cd Folder-Sorter
   ```
   
-  Alternatively, download the ZIP from the [GitHub repo](https://github.com/qs-1/Folder-Sorter), extract it, and open the folder.
+  Alternatively, download the ZIP of the current repo from [here](https://github.com/qs-1/Folder-Sorter/archive/refs/heads/main.zip), extract it, and open the folder.
 
 <br>
 
