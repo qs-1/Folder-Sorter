@@ -1,48 +1,77 @@
 # Folder Sorter
 
 A Windows system tray app to automatically sort files into categorized subfolders based on extensions. Includes a GUI for configuration.
-
-> **⚠️ Disclaimer:** This app directly modifies your file system by moving files based on your configuration. Incorrect configuration or unintended use could lead to permanent changes in your directory structure. **Please use with caution and ensure your configuration is correct before sorting.** It's recommended to test on a non-critical folder first.
-
-
 <div align="center">
-  <a href="https://github.com/user-attachments/assets/afad11f3-0050-444c-8eb7-4bf614db6e1b"><img src="https://github.com/user-attachments/assets/afad11f3-0050-444c-8eb7-4bf614db6e1b" alt="Folder-Sorter-demo" border="0" width="549"></a>
+  <a href="https://github.com/user-attachments/assets/b0e2564a-45c0-41bf-9d9c-e563e1b83d3d"><img src="https://github.com/user-attachments/assets/b0e2564a-45c0-41bf-9d9c-e563e1b83d3d" alt="Folder-Sorter-demo" border="0" height="797"></a>
 </div>
 
+
+
 <div align="center">
-  <a href="https://github.com/user-attachments/assets/248fff3b-3f66-408d-bad9-1c8b8a89fc76"><img src="https://github.com/user-attachments/assets/248fff3b-3f66-408d-bad9-1c8b8a89fc76" border="0" height="118"></a>
+  <a href="https://github.com/user-attachments/assets/e930ec31-937b-462e-969d-2fbc21c58e2d"><img src="https://github.com/user-attachments/assets/e930ec31-937b-462e-969d-2fbc21c58e2d" alt="tray_icon" border="0" height="97"></a>
   &nbsp;&nbsp;&nbsp;
-  <a href="https://github.com/user-attachments/assets/6fc29ed1-7d09-46b4-9c7a-132d0e0c1c3d"><img src="https://github.com/user-attachments/assets/6fc29ed1-7d09-46b4-9c7a-132d0e0c1c3d" alt="Tray Menu Options" border="0" height="127"></a>
+  <a href="https://github.com/user-attachments/assets/db9b411d-144b-46de-9add-55586eaaecf8"><img src="https://github.com/user-attachments/assets/db9b411d-144b-46de-9add-55586eaaecf8" alt="tray_options" border="0" height="123"></a>
 </div>
+<br>
 
+> **⚠️ Disclaimer:** This app directly modifies your file system by moving files based on your configuration. Incorrect configuration or unintended use could lead to permanent changes in your directory structure. **Please ensure your configuration is correct before sorting.**
+> 
 ## Features
 
-*   **System Tray App:** Runs persistently with menu options including sort.
-*   **Configuration GUI:** Set target folder & define category/extension rules.
-*   **Duplicate Handling:** Avoids overwrites by renaming incoming files if names clash.
-*   **Persistent Settings:** Saves configuration to `config.json`.
-*   **Windows Notifications:** Notifies upon sort completion with a button to open that folder.
+* **System Tray Integration:** Runs in the background with menu options for sorting
+* **Configuration GUI:** Set target folders and define custom category/extension mapping rules
+* **Duplicate Handling:** Automatically renames files to prevent overwrites when name conflicts occur
+* **Persistent Settings:** Automatically saves settings to `%LOCALAPPDATA%\FolderSorter\config.json`
+* **Windows Notifications:** Shows completion notifications with quick access to open the sorted folder
+
 
 ## Installation
 
-1.  **Prerequisites:** Windows, Python 3.x.
-2.  **Get Code:**
-    ```bash
-    git clone https://github.com/qs-1/Folder-Sorter.git
-    cd Folder-Sorter
-    ```
-3.  **Setup Environment (Recommended):**
-    ```bash
-    python -m venv venv
-    .\venv\Scripts\activate
-    pip install -r requirements.txt
-    ```
+1. Go to the [Releases Page](https://github.com/qs-1/Folder-Sorter/releases)
+2. Download & run `FolderSorter.exe`
+3. Look for the folder icon in your system tray. Right-click it to configure and sort
 
-## Usage
 
-1.  **Run:** `python main.py`
-2.  **Configure:** Right-click tray icon -> "Configure".
-    *   Set target folder via "Browse".
-    *   Add Folder names and comma-separated extensions (e.g., `Documents` | `pdf,docx,txt`).
-3.  **Sort:** Right-click tray icon -> "Sort Folder".
-4.  **Quit:** Right-click tray icon -> "Quit".
+## For Developing
+
+### Prerequisites
+* Python 3.x
+
+### Setup
+
+1. **Get the Code:**
+  ```bash
+  git clone https://github.com/qs-1/Folder-Sorter.git
+  cd Folder-Sorter
+  ```
+  
+  Alternatively, download the ZIP from the [GitHub repo](https://github.com/qs-1/Folder-Sorter), extract it, and open the folder.
+
+<br>
+
+2. **Install Dependencies:**
+  
+  **Recommended approach (using virtual environment):**
+  ```bash
+  python -m venv venv
+  # On Windows
+  .\venv\Scripts\activate
+  # On macOS/Linux
+  # source venv/bin/activate
+  pip install -r requirements.txt
+  ```
+  
+  **Alternative (global installation):**
+  ```bash
+  pip install -r requirements.txt
+  ```
+
+### Usage
+1. Run `python main.py`
+2. Look for the folder icon in your system tray. Right-click it to configure and sort
+
+## Contributing
+Contributions, issues, and feature requests are welcome! Feel free create an [issue](https://github.com/qs-1/Folder-Sorter/issues)
+
+## License
+This project is licensed under the [MIT License](LICENSE)
