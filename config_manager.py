@@ -31,6 +31,7 @@ def get_config_directory():
 CONFIG_FILE = os.path.join(get_config_directory(), 'config.json')
 APP_ICON = resource_path('icons/purp-sort.ico')
 DELETE_PNG = resource_path('icons/x.png')
+SETTINGS_PNG = resource_path('icons/settings.png')
 
 # Define the paths to the font files
 REGULAR_PATH = resource_path('fonts/CascadiaCode-Regular.ttf')

@@ -2,6 +2,7 @@
 import ctypes
 import platform 
 import os
+import types
 import subprocess
 
 # initial blurryness fix for Windows
@@ -21,7 +22,7 @@ from CTkToolTip import CTkToolTip
 
 from config_manager import (
     config, load_config, save_config,
-    APP_ICON, DELETE_PNG, REGULAR_FONT, SEMIBOLD_FONT
+    APP_ICON, DELETE_PNG, SETTINGS_PNG, REGULAR_FONT, SEMIBOLD_FONT
 )
 import file_sorter
 
@@ -418,8 +419,6 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
     dialog.focus_force()
     parent_window.wait_window(dialog)
 # endregion
-
-
 # region unsaved exit popup
 def show_unsaved_changes_dialog(parent_window):
     """Shows a confirmation dialog for unsaved changes."""
@@ -434,41 +433,25 @@ def show_unsaved_changes_dialog(parent_window):
     # Create main content frame
     content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
     content_frame.pack(fill="both", expand=True, padx=20, pady=20)
-    content_frame.columnconfigure(0, weight=1)
-    content_frame.rowconfigure(0, weight=1) # Label
-    content_frame.rowconfigure(1, weight=0) # Buttons
 
     # Message label
     label = ctk.CTkLabel(
         content_frame,
-        text="You have unsaved changes. What would you like to do?",
-        font=FONTS['semibold_14'],
-        wraplength=330,
-        # justify="left"
+        text="You have unsaved changes.",
+        font=FONTS['semibold_14']
     )
-    label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
+    label.pack(pady=10)
 
     # Button frame
     button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
-    button_frame.grid(row=1, column=0, sticky="ew")
-    
-    button_frame.columnconfigure(0, weight=1)
-    button_frame.columnconfigure(1, weight=0)
-    button_frame.columnconfigure(2, weight=1)
-    button_frame.columnconfigure(3, weight=0)
-    button_frame.columnconfigure(4, weight=1)
+    button_frame.pack(pady=(20,10))
 
-    # Button callbacks
     def on_save():
         dialog.result = "save"
         dialog.destroy()
 
     def on_discard():
         dialog.result = "discard"
-        dialog.destroy()
-
-    def on_cancel():
-        dialog.result = "cancel"
         dialog.destroy()
 
     save_button = ctk.CTkButton(
@@ -481,7 +464,7 @@ def show_unsaved_changes_dialog(parent_window):
         hover_color="#858e6e",
         command=on_save
     )
-    save_button.grid(row=0, column=1, padx=10, pady=10)
+    save_button.pack(side="left", padx=10)
 
     discard_button = ctk.CTkButton(
         button_frame,
@@ -493,17 +476,17 @@ def show_unsaved_changes_dialog(parent_window):
         font=FONTS['semibold_12'],
         command=on_discard
     )
-    discard_button.grid(row=0, column=3, padx=10, pady=10)
+    discard_button.pack(side="left", padx=10)
 
-    # Set minimum size and update
+    # Set dialog size
     dialog.update_idletasks()
-    min_width = max(330, label.winfo_reqwidth() + 40)
-    min_height = label.winfo_reqheight() + button_frame.winfo_reqheight() + 80
-    dialog.minsize(min_width, min_height)
+    width = 350
+    height = 150
+    dialog.minsize(width, height)
     dialog.resizable(False, False)
 
-    dialog.protocol("WM_DELETE_WINDOW", on_cancel)
-    dialog.center_window(width=min_width, height=min_height) 
+    dialog.protocol("WM_DELETE_WINDOW", lambda: setattr(dialog, 'result', 'cancel') or dialog.destroy())
+    dialog.center_window(width=width, height=height)
     dialog.transient(parent_window)
     dialog.grab_set()
     dialog.lift()
@@ -1003,6 +986,17 @@ class ConfigWindow(ctk.CTk):
             print(f"Error loading delete image: {e}")
             self.delete_icon = None
 
+        # --- Initialize settings_icon ---
+        try:
+            self.settings_icon = ctk.CTkImage(
+                light_image=Image.open(SETTINGS_PNG),
+                dark_image=Image.open(SETTINGS_PNG),
+                size=(12,13)
+            )
+        except Exception as e:
+            print(f"Error loading settings image: {e}")
+            self.settings_icon = None
+
         # --- Build UI Elements ---
         self._build_path_frame()
         self._build_add_frame()
@@ -1393,6 +1387,197 @@ class ConfigWindow(ctk.CTk):
         self.new_category_entry.delete(0, ctk.END)
         self.new_extensions_entry.delete(0, ctk.END)
 
+    def open_settings_dialog(self):
+        """Open the settings dialog window."""
+        dialog = ToplevelIco(self, APP_ICON)
+        dialog.title("Settings")
+        dialog.resizable(False, False)
+
+        # Main content frame with padding
+        content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # --- Settings Groups Frame ---
+        settings_frame = ctk.CTkFrame(content_frame, fg_color="#232323", corner_radius=10)
+        settings_frame.pack(fill="x", pady=(0, 15), ipady=5)
+
+        # --- Notification Settings Group ---
+        notif_section = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        notif_section.pack(fill="x", padx=15, pady=(8, 5))
+        
+        # Header with underline separator
+        notif_header_frame = ctk.CTkFrame(notif_section, fg_color="transparent")
+        notif_header_frame.pack(fill="x")
+        
+        notif_header = ctk.CTkLabel(
+            notif_header_frame, 
+            text="Notifications", 
+            font=FONTS['semibold_13'],
+            text_color="#a3ab8a"
+        )
+        notif_header.pack(side="left", anchor="w", pady=(0, 2))
+        
+        # Separator
+        notif_separator = ctk.CTkFrame(notif_section, height=1, fg_color="#3a3a3a")
+        notif_separator.pack(fill="x", pady=(0, 6))
+
+        # Setting container (adds visual separation)
+        notif_container = ctk.CTkFrame(notif_section, fg_color="#2a2a2a", corner_radius=6)
+        notif_container.pack(fill="x", padx=5, pady=(0, 3))
+        
+        # --- Custom darkmode checkbox style (white tick) ---
+        notif_var = ctk.BooleanVar(value=config.get("enable_notifications", True))
+        notif_checkbox = ctk.CTkCheckBox(
+            notif_container,
+            text="Enable notifications after sorting",
+            variable=notif_var,
+            font=FONTS['regular_12'],
+            fg_color="#7a8164",
+            border_color="#7a8164", 
+            hover_color="#5d634d",
+            checkbox_height=22,
+            checkbox_width=22,
+            text_color="#d8dcc7"
+        )
+        notif_checkbox.pack(anchor="w", padx=10, pady=(12, 12))
+
+        # Force white tick by monkey-patching the _draw_checkbox method if possible
+        try:
+            # Only patch if not already patched
+            if not hasattr(notif_checkbox, "_original_draw_checkbox"):
+                notif_checkbox._original_draw_checkbox = notif_checkbox._draw_checkbox
+                def _draw_checkbox_white_tick(self, *args, **kwargs):
+                    self._original_draw_checkbox(*args, **kwargs)
+                    if self._variable.get() == self._onvalue:
+                        # Draw white tick manually
+                        canvas = self._canvas
+                        w = int(self._checkbox_width)
+                        h = int(self._checkbox_height)
+                        # Remove previous tick if any
+                        canvas.delete("custom_tick")
+                        # Draw a white tick (simple lines)
+                        canvas.create_line(w*0.25, h*0.55, w*0.45, h*0.75, w*0.75, h*0.25,
+                                          fill="#ffffff", width=2.5, capstyle="round", tags="custom_tick")
+                    else:
+                        # Remove tick if unchecked
+                        self._canvas.delete("custom_tick")
+                notif_checkbox._draw_checkbox = types.MethodType(_draw_checkbox_white_tick, notif_checkbox)
+                notif_checkbox._draw_checkbox()
+        except Exception as e:
+            print(f"Could not patch notif_checkbox for white tick: {e}")
+
+        # --- UI Settings Group ---
+        ui_section = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        ui_section.pack(fill="x", padx=15, pady=(5, 8))
+        
+        # Header with underline separator
+        ui_header_frame = ctk.CTkFrame(ui_section, fg_color="transparent")
+        ui_header_frame.pack(fill="x") 
+        
+        ui_header = ctk.CTkLabel(
+            ui_header_frame, 
+            text="User Interface", 
+            font=FONTS['semibold_13'],
+            text_color="#a3ab8a"
+        )
+        ui_header.pack(side="left", anchor="w", pady=(0, 2))
+        
+        # Separator
+        ui_separator = ctk.CTkFrame(ui_section, height=1, fg_color="#3a3a3a")
+        ui_separator.pack(fill="x", pady=(0, 6))
+
+        # Setting container (adds visual separation)
+        ui_container = ctk.CTkFrame(ui_section, fg_color="#2a2a2a", corner_radius=6)
+        ui_container.pack(fill="x", padx=5, pady=(0, 3))
+        
+        # --- Custom darkmode checkbox style (white tick) ---
+        confirm_delete_var = ctk.BooleanVar(value=not config.get("dont_show_again", False))
+        confirm_delete_checkbox = ctk.CTkCheckBox(
+            ui_container,
+            text="Confirm before deleting categories",
+            variable=confirm_delete_var,
+            font=FONTS['regular_12'],
+            fg_color="#7a8164",
+            border_color="#7a8164", 
+            hover_color="#5d634d",
+            checkbox_height=22,
+            checkbox_width=22,
+            text_color="#d8dcc7"
+        )
+        confirm_delete_checkbox.pack(anchor="w", padx=10, pady=(12, 12))
+
+        # Force white tick by monkey-patching the _draw_checkbox method if possible
+        try:
+            if not hasattr(confirm_delete_checkbox, "_original_draw_checkbox"):
+                confirm_delete_checkbox._original_draw_checkbox = confirm_delete_checkbox._draw_checkbox
+                def _draw_checkbox_white_tick(self, *args, **kwargs):
+                    self._original_draw_checkbox(*args, **kwargs)
+                    if self._variable.get() == self._onvalue:
+                        canvas = self._canvas
+                        w = int(self._checkbox_width)
+                        h = int(self._checkbox_height)
+                        canvas.delete("custom_tick")
+                        canvas.create_line(w*0.25, h*0.55, w*0.45, h*0.75, w*0.75, h*0.25,
+                                          fill="#ffffff", width=2.5, capstyle="round", tags="custom_tick")
+                    else:
+                        self._canvas.delete("custom_tick")
+                confirm_delete_checkbox._draw_checkbox = types.MethodType(_draw_checkbox_white_tick, confirm_delete_checkbox)
+                confirm_delete_checkbox._draw_checkbox()
+        except Exception as e:
+            print(f"Could not patch confirm_delete_checkbox for white tick: {e}")
+
+        # --- Button Frame ---
+        button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        button_frame.pack(fill="x", pady=(5, 0))
+        button_frame.columnconfigure(0, weight=1)  # Push buttons to right side
+        
+        def on_save():
+            # Save notification setting
+            config["enable_notifications"] = notif_var.get()
+            
+            # Save confirm delete setting (note the inversion of logic)
+            config["dont_show_again"] = not confirm_delete_var.get()
+            
+            # Save all config changes
+            save_config()
+            dialog.destroy()
+
+        save_btn = ctk.CTkButton(
+            button_frame,
+            text="Save",
+            width=80,
+            font=FONTS['semibold_12'],
+            text_color="#13140e",
+            fg_color="#a3ab8a",
+            hover_color="#858e6e",
+            command=on_save
+        )
+        save_btn.grid(row=0, column=1, padx=(10, 0), pady=(10, 0))
+        
+        cancel_btn = ctk.CTkButton(
+            button_frame,
+            text="Cancel",
+            width=80,
+            font=FONTS['semibold_12'],
+            fg_color="#343638",
+            hover_color="#2d2a2e",
+            command=dialog.destroy
+        )
+        cancel_btn.grid(row=0, column=0, padx=(0, 10), pady=(10, 0), sticky="e")
+
+        # Set dialog size based on content
+        dialog.update_idletasks()
+        min_width = 400
+        min_height = dialog.winfo_reqheight()
+        dialog.minsize(min_width, min_height)
+        
+        # Position and show dialog
+        dialog.center_window()
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.focus_force()
+        self.wait_window(dialog)
+
     def _build_scrollable_frame(self):
         """Creates the main scrollable frame."""
         self.scrollable_frame = ctk.CTkScrollableFrame(self)
@@ -1406,34 +1591,99 @@ class ConfigWindow(ctk.CTk):
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
-        # Build Header
+        # Build Header using the same structure as CategoryRow
         header_frame = ctk.CTkFrame(self.scrollable_frame)
-        header_frame.pack(fill="x", padx=5, pady=10)
+        header_frame.pack(fill="x", padx=2, pady=5)
 
-        folders_frame = ctk.CTkFrame(header_frame, corner_radius=8, fg_color="#242424")
-        folders_frame.pack(side="left", padx=(68, 0))
-        folders_label = ctk.CTkLabel(folders_frame, text="Folders", font=FONTS['semibold_12'])
-        folders_label.pack(side="left", padx=(7,6))
-        CTkToolTip(folders_label,
+        # --- Folder Column ---
+        folders_frame = ctk.CTkFrame(
+            header_frame,
+            corner_radius=10,
+            height=40,
+            fg_color="#2b2b2b"
+        )
+        folders_frame.pack_propagate(False)
+        folders_frame.pack(side="left", fill="x", expand=True, padx=(5,2), pady=5)
+        # put the label in its own bubble
+        folder_label_frame = ctk.CTkFrame(
+            folders_frame,
+            corner_radius=8,
+            fg_color="#242424"
+        )
+        folder_label_frame.pack(anchor="center", pady=5, padx=8)
+
+        folders_label = ctk.CTkLabel(
+            folder_label_frame,
+            text="Folders",
+            font=FONTS['semibold_12']
+        )
+        folders_label.pack(padx=8)
+        CTkToolTip(
+            folders_label,
             message=(
                 "Folder name: The category for sorted files.\n"
                 "Example: 'Pictures', 'PDFs', 'Work Documents'\n"
                 "Use slashes to create subfolders, 'MS/docx' will create 'docx' inside 'MS'."
             ),
-            x_offset=0, y_offset=20, alpha=0.92, font=FONTS['regular_11'])
+            x_offset=0, y_offset=20, alpha=0.92, font=FONTS['regular_11']
+        )
 
-        extensions_frame = ctk.CTkFrame(header_frame, corner_radius=8, fg_color="#242424")
-        extensions_frame.pack(side="left", padx=(140, 0))
-        extensions_label = ctk.CTkLabel(extensions_frame, text="Extensions", font=FONTS['semibold_12'])
-        extensions_label.pack(side="left", padx=(7,6))
-        CTkToolTip(extensions_label,
+        # --- Extensions Column ---
+        extensions_frame = ctk.CTkFrame(
+            header_frame,
+            corner_radius=10,
+            height=40,
+            fg_color="#2b2b2b"
+        )
+        extensions_frame.pack_propagate(False)
+        extensions_frame.pack(side="left", fill="x", expand=True, padx=(12,0), pady=5)
+        # put the label in its own bubble
+        ext_label_frame = ctk.CTkFrame(
+            extensions_frame,
+            corner_radius=8,
+            fg_color="#242424"
+        )
+        ext_label_frame.pack(anchor="center", pady=5, padx=8)
+
+        extensions_label = ctk.CTkLabel(
+            ext_label_frame,
+            text="Extensions",
+            font=FONTS['semibold_12']
+        )
+        extensions_label.pack(padx=8)
+
+        CTkToolTip(
+            extensions_label,
             message=(
                 "Extensions: Comma-separated list, no dots.\n"
                 "Example: jpg, png, pdf, docx\n"
                 "Spaces are ignored. Use only valid file extensions."
             ),
-            x_offset=0, y_offset=20, alpha=0.92, font=FONTS['regular_11'])
+            x_offset=0, y_offset=20, alpha=0.92, font=FONTS['regular_11']
+        )
 
+
+        # --- Settings Button Column ---
+        button_frame = ctk.CTkFrame(
+            header_frame,
+            width=90,
+            height=40,
+            fg_color="transparent"
+        )
+        button_frame.pack_propagate(False)
+        button_frame.pack(side="left", padx=(7,0), pady=5)
+
+        settings_button = ctk.CTkButton(
+            button_frame,
+            width=25, height=25,
+            font=FONTS['semibold_12'],
+            fg_color="#242424",
+            hover_color="#343638",
+            image=self.settings_icon,
+            text="",
+            command=self.open_settings_dialog
+        )
+        settings_button.place(relx=0.5, rely=0.5, anchor="center")
 
         # config should be loaded already
         sorted_folder_extensions = sorted(config['folder_extensions_mapping'].items(), key=lambda item: item[0].lower())
