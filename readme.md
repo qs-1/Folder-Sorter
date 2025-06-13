@@ -3,8 +3,8 @@
 A Windows system tray app to automatically sort files into categorized subfolders based on extensions. Includes a GUI for configuration.
 
 <p align="center">
-  <a href="https://github.com/user-attachments/assets/b0e2564a-45c0-41bf-9d9c-e563e1b83d3d">
-    <img src="https://github.com/user-attachments/assets/b0e2564a-45c0-41bf-9d9c-e563e1b83d3d" alt="Folder-Sorter-demo" style="max-width:100%; height:auto;">
+  <a href="https://github.com/user-attachments/assets/f4aa473d-79ba-4e57-a12e-0e0818b7a26c">
+    <img src="https://github.com/user-attachments/assets/f4aa473d-79ba-4e57-a12e-0e0818b7a26c" alt="Folder-Sorter-demo" style="max-width:100%; height:auto;">
   </a>
 </p>
 
