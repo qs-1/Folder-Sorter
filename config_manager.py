@@ -1,5 +1,7 @@
 import sys
 import os
+import platform
+import subprocess
 from os import path
 from json import dump, load, JSONDecodeError
 from PIL import ImageFont
@@ -19,13 +21,29 @@ def get_config_directory():
     if os.name == 'nt':  # Windows
         # Use AppData/Local
         config_dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'FolderSorter')
-    else:  # Unix-like systems
+    else:  # Unix 
         # Use ~/.config
         config_dir = os.path.join(os.path.expanduser('~'), '.config', 'FolderSorter')
     
     # Create directory if it doesn't exist
     os.makedirs(config_dir, exist_ok=True)
     return config_dir
+
+def open_config_folder():
+    """Open the config folder in the system file manager"""
+    config_dir = get_config_directory()
+    try:
+        if platform.system() == "Windows":
+            os.startfile(config_dir)
+        elif platform.system() == "Darwin":  # macOS
+            subprocess.run(["open", config_dir])
+        else:  # Linux and other Unix
+            subprocess.run(["xdg-open", config_dir])
+        print(f"Opened config folder: {config_dir}")
+        return True
+    except Exception as e:
+        print(f"Error opening config folder: {e}")
+        return False
 
 # Define constants for file paths
 CONFIG_FILE = os.path.join(get_config_directory(), 'config.json')

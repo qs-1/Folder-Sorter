@@ -1386,7 +1386,7 @@ class ConfigWindow(ctk.CTk):
 
         self.new_category_entry.delete(0, ctk.END)
         self.new_extensions_entry.delete(0, ctk.END)
-
+    
     def open_settings_dialog(self):
         """Open the settings dialog window."""
         dialog = ToplevelIco(self, APP_ICON)
@@ -1441,34 +1441,9 @@ class ConfigWindow(ctk.CTk):
         )
         notif_checkbox.pack(anchor="w", padx=10, pady=(12, 12))
 
-        # Force white tick by monkey-patching the _draw_checkbox method if possible
-        try:
-            # Only patch if not already patched
-            if not hasattr(notif_checkbox, "_original_draw_checkbox"):
-                notif_checkbox._original_draw_checkbox = notif_checkbox._draw_checkbox
-                def _draw_checkbox_white_tick(self, *args, **kwargs):
-                    self._original_draw_checkbox(*args, **kwargs)
-                    if self._variable.get() == self._onvalue:
-                        # Draw white tick manually
-                        canvas = self._canvas
-                        w = int(self._checkbox_width)
-                        h = int(self._checkbox_height)
-                        # Remove previous tick if any
-                        canvas.delete("custom_tick")
-                        # Draw a white tick (simple lines)
-                        canvas.create_line(w*0.25, h*0.55, w*0.45, h*0.75, w*0.75, h*0.25,
-                                          fill="#ffffff", width=2.5, capstyle="round", tags="custom_tick")
-                    else:
-                        # Remove tick if unchecked
-                        self._canvas.delete("custom_tick")
-                notif_checkbox._draw_checkbox = types.MethodType(_draw_checkbox_white_tick, notif_checkbox)
-                notif_checkbox._draw_checkbox()
-        except Exception as e:
-            print(f"Could not patch notif_checkbox for white tick: {e}")
-
         # --- UI Settings Group ---
         ui_section = ctk.CTkFrame(settings_frame, fg_color="transparent")
-        ui_section.pack(fill="x", padx=15, pady=(5, 8))
+        ui_section.pack(fill="x", padx=15, pady=(5, 5))
         
         # Header with underline separator
         ui_header_frame = ctk.CTkFrame(ui_section, fg_color="transparent")
@@ -1506,36 +1481,62 @@ class ConfigWindow(ctk.CTk):
         )
         confirm_delete_checkbox.pack(anchor="w", padx=10, pady=(12, 12))
 
-        # Force white tick by monkey-patching the _draw_checkbox method if possible
-        try:
-            if not hasattr(confirm_delete_checkbox, "_original_draw_checkbox"):
-                confirm_delete_checkbox._original_draw_checkbox = confirm_delete_checkbox._draw_checkbox
-                def _draw_checkbox_white_tick(self, *args, **kwargs):
-                    self._original_draw_checkbox(*args, **kwargs)
-                    if self._variable.get() == self._onvalue:
-                        canvas = self._canvas
-                        w = int(self._checkbox_width)
-                        h = int(self._checkbox_height)
-                        canvas.delete("custom_tick")
-                        canvas.create_line(w*0.25, h*0.55, w*0.45, h*0.75, w*0.75, h*0.25,
-                                          fill="#ffffff", width=2.5, capstyle="round", tags="custom_tick")
-                    else:
-                        self._canvas.delete("custom_tick")
-                confirm_delete_checkbox._draw_checkbox = types.MethodType(_draw_checkbox_white_tick, confirm_delete_checkbox)
-                confirm_delete_checkbox._draw_checkbox()
-        except Exception as e:
-            print(f"Could not patch confirm_delete_checkbox for white tick: {e}")
+        # --- Advanced Settings Group ---
+        advanced_section = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        advanced_section.pack(fill="x", padx=15, pady=(5, 0))
+        
+        # Header with underline separator
+        advanced_header_frame = ctk.CTkFrame(advanced_section, fg_color="transparent")
+        advanced_header_frame.pack(fill="x") 
+        
+        advanced_header = ctk.CTkLabel(
+            advanced_header_frame, 
+            text="Advanced", 
+            font=FONTS['semibold_13'],
+            text_color="#a3ab8a"
+        )
+        advanced_header.pack(side="left", anchor="w", pady=(0, 2))
+        
+        # Separator
+        advanced_separator = ctk.CTkFrame(advanced_section, height=1, fg_color="#3a3a3a")
+        advanced_separator.pack(fill="x", pady=(0, 8))
+
+        # Setting container 
+        advanced_container = ctk.CTkFrame(advanced_section, fg_color="transparent", corner_radius=6)
+        advanced_container.pack(fill="x", padx=5)
+        
+        # Config folder button
+        def open_config_folder_action():
+            from config_manager import open_config_folder
+            success = open_config_folder()
+            if success:
+                print("Config folder opened successfully")
+            else:
+                print("Failed to open config folder")
+        
+        config_folder_btn = ctk.CTkButton(
+            advanced_container,
+            text="Open Config Folder",
+            width=140,
+            height=28,
+            font=FONTS['regular_12'],
+            fg_color="#343638",
+            hover_color="#404347",
+            text_color="#d8dcc7",
+            command=open_config_folder_action
+        )
+        config_folder_btn.pack(anchor="w")
 
         # --- Button Frame ---
         button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
-        button_frame.pack(fill="x", pady=(5, 0))
-        button_frame.columnconfigure(0, weight=1)  # Push buttons to right side
+        button_frame.pack(fill="x", pady=(0, 5))
+        button_frame.columnconfigure(0, weight=1) 
         
         def on_save():
             # Save notification setting
             config["enable_notifications"] = notif_var.get()
             
-            # Save confirm delete setting (note the inversion of logic)
+            # Save confirm delete setting
             config["dont_show_again"] = not confirm_delete_var.get()
             
             # Save all config changes
