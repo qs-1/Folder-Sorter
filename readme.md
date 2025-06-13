@@ -1,18 +1,23 @@
 # Folder Sorter
 
 A Windows system tray app to automatically sort files into categorized subfolders based on extensions. Includes a GUI for configuration.
-<div align="center">
-  <a href="https://github.com/user-attachments/assets/b0e2564a-45c0-41bf-9d9c-e563e1b83d3d"><img src="https://github.com/user-attachments/assets/b0e2564a-45c0-41bf-9d9c-e563e1b83d3d" alt="Folder-Sorter-demo" border="0" height="797"></a>
-</div>
 
+<p align="center">
+  <a href="https://github.com/user-attachments/assets/b0e2564a-45c0-41bf-9d9c-e563e1b83d3d">
+    <img src="https://github.com/user-attachments/assets/b0e2564a-45c0-41bf-9d9c-e563e1b83d3d" alt="Folder-Sorter-demo" style="max-width:100%; height:auto;">
+  </a>
+</p>
 
+<p align="center">
+  <a href="https://github.com/user-attachments/assets/e930ec31-937b-462e-969d-2fbc21c58e2d">
+    <img src="https://github.com/user-attachments/assets/e930ec31-937b-462e-969d-2fbc21c58e2d" alt="tray_icon" style="max-width:45%; height:auto;">
+  </a>
+  &nbsp;
+  <a href="https://github.com/user-attachments/assets/db9b411d-144b-46de-9add-55586eaaecf8">
+    <img src="https://github.com/user-attachments/assets/db9b411d-144b-46de-9add-55586eaaecf8" alt="tray_options" style="max-width:45%; height:auto;">
+  </a>
+</p>
 
-<div align="center">
-  <a href="https://github.com/user-attachments/assets/e930ec31-937b-462e-969d-2fbc21c58e2d"><img src="https://github.com/user-attachments/assets/e930ec31-937b-462e-969d-2fbc21c58e2d" alt="tray_icon" border="0" height="97"></a>
-  &nbsp;&nbsp;&nbsp;
-  <a href="https://github.com/user-attachments/assets/db9b411d-144b-46de-9add-55586eaaecf8"><img src="https://github.com/user-attachments/assets/db9b411d-144b-46de-9add-55586eaaecf8" alt="tray_options" border="0" height="123"></a>
-</div>
-<br>
 
 > **⚠️ Disclaimer:** This app directly modifies your file system by moving files based on your configuration. Incorrect configuration or unintended use could lead to permanent changes in your directory structure. **Please ensure your configuration is correct before sorting.**
 > 
