@@ -1,0 +1,12 @@
+*
+!.gitignore
+!icons/
+!screenshots/
+!LICENSE
+!config_manager.py
+!file_sorter.py
+!gui.py
+!main.py
+!readme.md
+!requirements.txt
+!tray_handler.py

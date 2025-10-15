@@ -1,8 +1,9 @@
-from os import path, makedirs, listdir
+from os import path, makedirs, listdir, remove
 from shutil import move
 from threading import Thread
 from win11toast import toast
-from config_manager import load_config
+from config_manager import load_config, SORT_LOG_FILE
+import json
 
 # Global variables for GUI callbacks and app instance
 gui_app_instance = None
@@ -67,6 +68,7 @@ def sort_files():
     folder_extensions_mapping = config_data.get('folder_extensions_mapping', {})
     files_moved = False
     failed_folder_creations = set() # Keep track of folders that failed to be created
+    moved_files_log = [] # To log file movements for undo
 
     try:
         source_files = listdir(folder_path)
@@ -137,6 +139,10 @@ def sort_files():
                         print(f"Attempting to move: '{file_path}' to '{destination_file_path}'")
                         move(file_path, destination_file_path)
                         files_moved = True
+                        moved_files_log.append({
+                            "source": file_path,
+                            "destination": destination_file_path
+                        })
                         print(f"Successfully moved: '{original_filename}' to '{destination_file_path}'")
                     except OSError as e:
                         err_msg = f"Error moving file '{original_filename}' to '{target_folder_path}': {str(e)}"
@@ -156,6 +162,10 @@ def sort_files():
                     # and move to the next file in the source_files list.
                     break 
     
+    # Save the moved files log to SORT_LOG_FILE
+    with open(SORT_LOG_FILE, 'w') as f:
+        json.dump(moved_files_log, f, indent=4)
+
     if files_moved:
         print("File sorting process completed. Some files were moved.")
         notification_thread = Thread(target=show_notification, args=(folder_path,))
@@ -168,3 +178,41 @@ def sort_files():
 
 
     return None # successful sort
+
+def undo_last_sort():
+    """Reverts the last sorting operation."""
+    if not path.exists(SORT_LOG_FILE):
+        print("No sort operation to undo.")
+        return
+
+    with open(SORT_LOG_FILE, 'r') as f:
+        try:
+            moved_files_log = json.load(f)
+        except json.JSONDecodeError:
+            print("Error reading sort log. Cannot undo.")
+            return
+
+    if not moved_files_log:
+        print("Sort log is empty. Nothing to undo.")
+        return
+
+    print("Starting undo operation...")
+    for move_record in reversed(moved_files_log):
+        source = move_record["source"]
+        destination = move_record["destination"]
+
+        try:
+            if path.exists(destination):
+                print(f"Moving '{destination}' back to '{source}'")
+                move(destination, source)
+            else:
+                print(f"File '{destination}' not found. Cannot undo this move.")
+        except Exception as e:
+            print(f"Error undoing move for '{destination}': {e}")
+
+    # Clear the log file after undo
+    try:
+        remove(SORT_LOG_FILE)
+        print("Undo operation complete.")
+    except OSError as e:
+        print(f"Error removing sort log file: {e}")

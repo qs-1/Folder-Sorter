@@ -1,7 +1,8 @@
 from threading import Thread
 from PIL import Image
-from config_manager import APP_ICON
+from config_manager import APP_ICON, SORT_LOG_FILE
 from pystray import Icon, Menu, MenuItem
+import os
 
 import file_sorter
 import gui
@@ -109,6 +110,7 @@ def setup_tray():
     # Create menu items
     menu = Menu(
         MenuItem('Sort Folder', run_sort_files),
+        MenuItem('Undo Last Sort', file_sorter.undo_last_sort, enabled=lambda item: os.path.exists(SORT_LOG_FILE)),
         MenuItem('Configure', open_config_gui), # will run in a separate thread
         MenuItem('Quit', quit_app)
     )

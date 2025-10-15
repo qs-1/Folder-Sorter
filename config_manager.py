@@ -47,6 +47,7 @@ def open_config_folder():
 
 # Define constants for file paths
 CONFIG_FILE = os.path.join(get_config_directory(), 'config.json')
+SORT_LOG_FILE = os.path.join(get_config_directory(), 'sort_log.json')
 APP_ICON = resource_path('icons/purp-sort.ico')
 DELETE_PNG = resource_path('icons/x.png')
 SETTINGS_PNG = resource_path('icons/settings.png')
