@@ -121,19 +121,18 @@ def toggle_auto_sort(icon, item):
 
 def quit_app():
     """Quit the application and stop the tray icon"""
-    global tray_app, config_gui_thread # gui.standalone_popup_thread is managed within gui.py mostly
+    global tray_app, config_gui_thread
     print("Quit requested.")
 
     # Close the standalone popup window if it's running
     if gui.standalone_popup_window and gui.standalone_popup_window.winfo_exists():
         print("Attempting to close standalone popup window...")
-        gui._destroy_standalone_popup() # This schedules destroy and sets gui.standalone_popup_window to None
+        gui._destroy_standalone_popup()
 
     # Close the main GUI window if it's running
     if gui.app and gui.app.winfo_exists():
         print("Attempting to schedule main GUI window destruction...")
         try:
-            # Schedule destroy; the GUI thread itself will handle cleanup including setting gui.app to None
             gui.app.after(0, gui.app.destroy)
         except Exception as e:
             print(f"Error scheduling GUI destroy: {e}")
@@ -146,17 +145,17 @@ def quit_app():
             print("Warning: Standalone popup thread did not finish in time.")
         else:
             print("Standalone popup thread finished.")
-    gui.standalone_popup_thread = None # Ensure reference is cleared
+    gui.standalone_popup_thread = None
 
     # Wait for the main config GUI thread to end
     if config_gui_thread and config_gui_thread.is_alive():
         print("Waiting for main GUI thread to finish...")
-        config_gui_thread.join(timeout=2.0) # Increased timeout
+        config_gui_thread.join(timeout=2.0)
         if config_gui_thread.is_alive():
             print("Warning: Main GUI thread did not finish in time.")
         else:
             print("Main GUI thread finished.")
-    config_gui_thread = None # Ensure reference is cleared
+    config_gui_thread = None
 
     # Stop the tray app
     if tray_app:
@@ -191,8 +190,8 @@ def setup_tray():
     tray_app.title = "Folder Sorter"
     
     print("Running tray icon...")
-    # Run the tray icon (blocking call in this thread)
-    tray_app.run()
+
+    tray_app.run() # Blocking
     print("Tray icon stopped.")
 
 

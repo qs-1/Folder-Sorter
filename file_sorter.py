@@ -1,11 +1,10 @@
-from os import path, makedirs, listdir, remove
+from os import path, makedirs, remove
 import os
 from shutil import move
 from threading import Thread, Timer
 from win11toast import toast
 from config_manager import load_config, save_config, SORT_LOG_FILE
 import json
-import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -23,18 +22,15 @@ def set_gui_callbacks(app_instance, error_dialog_func, focus_app_func):
 
 def _schedule_on_gui_thread(callback, *args):
     """Safely schedules a function call on the GUI thread if possible."""
-    # Check if the instance variable is set, but don't call winfo_exists here
     if gui_app_instance:
         try:
             gui_app_instance.after(0, lambda cb=callback, a=args: cb(*a))
-            return True # Scheduling attempted
+            return True
         except Exception as e:
-            # Catch potential errors if the Tk object is already gone
             print(f"Error scheduling GUI call for {callback.__name__}: {e}")
     else:
-        # Fallback or error handling if GUI isn't running or instance not set
         print(f"GUI instance not available to schedule call for {callback.__name__}")
-    return False # Not scheduled or instance not available
+    return False
 
 def generate_unique_filename(directory, filename):
     base, extension = path.splitext(filename)
@@ -51,7 +47,7 @@ def show_notification(folder_path):
     ]
 
     if focus_app:
-        _schedule_on_gui_thread(focus_app) # Schedule focus_app call
+        _schedule_on_gui_thread(focus_app)
 
     toast(
         'Folder Sorted',
@@ -71,8 +67,8 @@ def sort_files(files_to_sort=None, show_notification_on_success=True):
 
     folder_extensions_mapping = config_data.get('folder_extensions_mapping', {})
     files_moved = False
-    failed_folder_creations = set() # Keep track of folders that failed to be created
-    moved_files_log = [] # To log file movements for undo
+    failed_folder_creations = set()
+    moved_files_log = []
 
     try:
         if files_to_sort is None:
@@ -97,7 +93,6 @@ def sort_files(files_to_sort=None, show_notification_on_success=True):
     for original_filename in source_files:
         file_path = path.join(folder_path, original_filename)
 
-        # Process only files with extensions
         if '.' in original_filename:
             file_extension = original_filename.split('.')[-1].lower() # Normalize extension for comparison
             
@@ -106,17 +101,13 @@ def sort_files(files_to_sort=None, show_notification_on_success=True):
 
                 if file_extension in normalized_configured_extensions:
                     target_folder_path = path.join(folder_path, category_folder_name)
-                    # Normalize path for reliable checking in failed_folder_creations (OS-dependent case handling)
                     normalized_target_folder_path_for_check = path.normcase(target_folder_path)
 
                     if normalized_target_folder_path_for_check in failed_folder_creations:
-                        # If we already know we can't create this folder,
-                        # break from inner loop (categories), skip category
                         print(f"Skipping category '{category_folder_name}' for '{original_filename}' as folder creation previously failed.")
                         break 
 
                     try:
-                        # Attempt to create the directory. exist_ok=True means no error if it already exists.
                         makedirs(target_folder_path, exist_ok=True)
                     except OSError as e:
                         err_msg = f"Error creating folder '{target_folder_path}': {str(e)}. Files for this category will be skipped."
@@ -125,7 +116,7 @@ def sort_files(files_to_sort=None, show_notification_on_success=True):
                         else:
                             print(err_msg)
                         failed_folder_creations.add(normalized_target_folder_path_for_check)
-                        break # Break from inner loop (categories), process next file
+                        break
 
                     current_filename_to_move = original_filename
                     destination_file_path = path.join(target_folder_path, current_filename_to_move)
@@ -151,10 +142,6 @@ def sort_files(files_to_sort=None, show_notification_on_success=True):
                             _schedule_on_gui_thread(show_error_dialog, err_msg)
                         else:
                             print(err_msg)
-                    
-                    # Once a file is matched and its move attempted (succeeded or failed),
-                    # break from the inner loop (iterating through folder_extensions_mapping)
-                    # and move to the next file in the source_files list.
                     break 
     
     if files_moved:
@@ -182,12 +169,10 @@ def sort_files(files_to_sort=None, show_notification_on_success=True):
             notification_thread.daemon = True
             notification_thread.start()
     else:
-        # No files matched any criteria, or all matched files failed to move,
-        # or the source_files list was empty initially
         print("File sorting process completed. No files were moved.")
 
 
-    return None # successful sort
+    return None
 
 def undo_last_sort():
     """Reverts the last sorting operation."""

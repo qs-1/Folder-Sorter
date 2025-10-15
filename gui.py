@@ -2,7 +2,6 @@
 import ctypes
 import platform 
 import os
-import types
 import subprocess
 
 # initial blurryness fix for Windows
@@ -36,7 +35,7 @@ path_popup_window = None       # Transient popup window (ToplevelIco, child)
 standalone_popup_window = None # Standalone popup window (CTk, own thread)
 standalone_popup_thread = None # Thread for the standalone popup
 
-# --- Global Font Dictionary - Initialized with Fallbacks ---
+# Global font dictionary, initialized with fallbacks
 FONTS = {
     'regular_9': ("Arial", 9),
     'regular_11': ("Arial", 11),
@@ -55,17 +54,12 @@ def initialize_app_fonts():
     Should be called after a root ctk window is available.
     """
     global FONTS, _app_fonts_initialized
-    # Only attempt if not already successfully initialized with CTkFont objects
-    # or if the current fonts are still tuples (indicating fallback)
     if not _app_fonts_initialized or isinstance(FONTS.get('regular_9'), tuple):
         print("Attempting to initialize CTkFont objects...")
         try:
-            # Ensure REGULAR_FONT and SEMIBOLD_FONT are valid font objects
-            # from which getname() can be called. This assumes they are loaded
-            # correctly by config_manager.
             if REGULAR_FONT is None or SEMIBOLD_FONT is None:
                 print("Warning: REGULAR_FONT or SEMIBOLD_FONT not loaded. Cannot create CTkFont objects.")
-                _app_fonts_initialized = False # Mark as failed if base fonts are missing
+                _app_fonts_initialized = False # base fonts missing
                 return
 
             created_fonts = {
@@ -77,19 +71,16 @@ def initialize_app_fonts():
                 'semibold_13': ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=13),
                 'semibold_14': ctk.CTkFont(family=SEMIBOLD_FONT.getname()[0], size=14),
             }
-            # Use the newly created CTkFont for confirmation_regular_12 if regular_12 was created
             created_fonts['confirmation_regular_12'] = created_fonts.get('regular_12', FONTS['confirmation_regular_12'])
             
-            FONTS.update(created_fonts) # Update the global dictionary
+            FONTS.update(created_fonts)
             _app_fonts_initialized = True
             print("CTkFont objects initialized successfully.")
         except AttributeError as ae:
-            # This can happen if REGULAR_FONT.getname() fails because the font wasn't loaded
             print(f"Note: AttributeError during CTkFont creation (likely font not loaded by FontManager) - {ae}. Using fallback tuple fonts.")
             _app_fonts_initialized = False
         except Exception as e:
-            _app_fonts_initialized = False # Failed to init with CTkFont
-            # FONTS will retain its tuple-based fallbacks
+            _app_fonts_initialized = False 
             print(f"Note: Error creating CTkFont objects - {e}. Using fallback tuple fonts.")
 # endregion
 
@@ -103,14 +94,13 @@ class ToplevelIco(ctk.CTkToplevel):
             self.after(201, lambda: self.iconbitmap(icon_path))
 
     def center_window(self, width=None, height=None):
-        self.update_idletasks() # Ensure dialog measurements are up to date
+        self.update_idletasks()
 
         dialog_width = width if width is not None else self.winfo_width()
         dialog_height = height if height is not None else self.winfo_height()
 
         if not self.master or not self.master.winfo_exists():
             print("Error: Cannot center dialog, master window invalid.")
-            # Fallback: center on screen
             screen_width = self.winfo_screenwidth()
             screen_height = self.winfo_screenheight()
             x = max(0, (screen_width // 2) - (dialog_width // 2))
@@ -119,7 +109,7 @@ class ToplevelIco(ctk.CTkToplevel):
             return
 
         try:
-            # --- Get Scaling Factor (Prioritize ctypes on Windows) ---
+            # Get Scaling Factor
             scale_factor = 1.0
             if platform.system() == "Windows":
                 try:
@@ -127,42 +117,35 @@ class ToplevelIco(ctk.CTkToplevel):
                 except Exception as e_ctypes:
                     print(f"Dialog Center: Error getting scaling via ctypes ({e_ctypes}), trying CTk...")
                     try:
-                        # Fallback to CTk ScalingTracker
-                        self.master.update_idletasks() # Ensure master handle is ready
+                        self.master.update_idletasks()
                         scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(self.master.winfo_id())
                     except Exception as e_ctk:
                         print(f"Dialog Center: Error getting scaling via CTk ({e_ctk}), using 1.0.")
-                        scale_factor = 1.0 # Ultimate fallback
+                        scale_factor = 1.0
 
-            # --- Master Geometry ---
             master_x = self.master.winfo_x()
             master_y = self.master.winfo_y()
             master_logical_width = self.master.winfo_width()
             master_logical_height = self.master.winfo_height()
 
-            # Calculate sizes and center
             master_actual_width = int(master_logical_width * scale_factor)
             master_actual_height = int(master_logical_height * scale_factor)
             dialog_actual_width = int(dialog_width * scale_factor)
             dialog_actual_height = int(dialog_height * scale_factor)
 
-            # Calculate master's physical center on screen
             physical_master_center_x = master_x + (master_actual_width // 2)
             physical_master_center_y = master_y + (master_actual_height // 2)
 
-            # Calculate dialog's top-left physical position
             x = physical_master_center_x - (dialog_actual_width // 2)
             y = physical_master_center_y - (dialog_actual_height // 2)
 
-            # Ensure dialog is within screen bounds
             x = max(0, x)
             y = max(0, y)
 
-            # Set geometry using potentially provided dialog size and calculated position
             geometry_string = f'{dialog_width}x{dialog_height}+{x}+{y}'
             self.geometry(geometry_string)
 
-        except Exception as e: # Fallback if any error occurs during calculation
+        except Exception as e:
             print(f"Error during dialog centering: {e}")
             screen_width = self.winfo_screenwidth()
             screen_height = self.winfo_screenheight()
@@ -198,7 +181,6 @@ def show_error_dialog(parent_window, message):
         text=message,
         font=FONTS['semibold_14'],
         wraplength=380,
-        # justify="left"
     )
     label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
@@ -221,14 +203,12 @@ def show_error_dialog(parent_window, message):
     )
     ok_button.grid(row=0, column=0, pady=10)
 
-    # Set minimum size and update
     dialog.update_idletasks()
     min_width = max(380, label.winfo_reqwidth() + 40) 
     min_height = label.winfo_reqheight() + ok_button.winfo_reqheight() + 80
     dialog.minsize(min_width, min_height)
     dialog.resizable(False, False)
     
-    # Center on parent
     dialog.center_window() 
     dialog.transient(parent_window)
     dialog.grab_set()
@@ -245,31 +225,25 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
 
     dialog = ToplevelIco(parent_window, APP_ICON)
     dialog.title("Folder Already Exists")
-    dialog.result = False  # Default result
+    dialog.result = False
 
-
-    # Create main content frame with padding
     content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
     content_frame.pack(fill="both", expand=True, padx=20, pady=20)
     content_frame.columnconfigure(0, weight=1)
     content_frame.rowconfigure(0, weight=1)
     content_frame.rowconfigure(1, weight=0)
 
-    # Message label
     label = ctk.CTkLabel(
         content_frame,
         text=f"Folder '{folder_name}' already exists in the list.",
         font=FONTS['semibold_14'],
         wraplength=380,
-        # justify="left"
     )
     label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
-    # Button frame
     button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
     button_frame.grid(row=1, column=0, sticky="ew")
     
-    # Configure button frame columns for spacing
     button_frame.columnconfigure(0, weight=1)
     button_frame.columnconfigure(1, weight=0)
     button_frame.columnconfigure(2, weight=1)
@@ -307,7 +281,6 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
     )
     rename_button.grid(row=0, column=3, padx=10, pady=10)
 
-    # Set minimum size and update
     dialog.update_idletasks()
     min_width = max(380, label.winfo_reqwidth() + 40)
     min_height = label.winfo_reqheight() + button_frame.winfo_reqheight() + 80
@@ -464,7 +437,6 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
         text=f"Are you sure you want to delete the category '{folder_name}'?",
         font=FONTS['semibold_14'],
         wraplength=380,
-        # justify="left"
     )
     label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
 
@@ -536,6 +508,7 @@ def show_confirmation_dialog(parent_window, folder_name, on_confirm_callback):
     dialog.focus_force()
     parent_window.wait_window(dialog)
 # endregion
+
 # region unsaved exit popup
 def show_unsaved_changes_dialog(parent_window):
     """Shows a confirmation dialog for unsaved changes."""
@@ -545,8 +518,8 @@ def show_unsaved_changes_dialog(parent_window):
 
     dialog = ToplevelIco(parent_window, APP_ICON)
     dialog.title("Unsaved Changes")
-    dialog.result = "cancel"  # Default result
-
+    dialog.result = "cancel"
+    
     # Create main content frame
     content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
     content_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -621,20 +594,16 @@ def _select_and_set_folder_path(popup_to_close):
     if folder_path:
         save_config(folder_path=folder_path)
 
-        # Try to update the main ConfigWindow's path entry if it exists
         global app
         if app and app.winfo_exists():
             try:
-                # Schedule the update on the main GUI thread just in case
                 app.after(0, lambda p=folder_path: app.refresh_path_entry(p))
             except Exception as e:
                 print(f"Error refreshing main window path entry: {e}")
 
-        # Close the popup that triggered this
         if popup_to_close and popup_to_close.winfo_exists():
             popup_to_close.after(0, popup_to_close.destroy)
 
-        # Reset global references if the popup being closed is one of the tracked ones
         global path_popup_window, standalone_popup_window
         if popup_to_close == path_popup_window:
             path_popup_window = None
@@ -677,7 +646,7 @@ def path_prompt_popup(message):
         content_frame.rowconfigure(0, weight=1)  # Label row
         content_frame.rowconfigure(1, weight=0)  # Button frame row
     
-        # --- Message label ---
+        # Message label
         label = ctk.CTkLabel(
             content_frame, 
             text=message, 
@@ -691,7 +660,7 @@ def path_prompt_popup(message):
         button_frame.grid(row=1, column=0, sticky="ew")
         button_frame.columnconfigure(0, weight=1)  
     
-        # --- Set button ---
+        # Set button
         set_button = ctk.CTkButton(
             button_frame, 
             text="Set", 
@@ -758,7 +727,6 @@ def path_prompt_popup(message):
                 popup_min_width, popup_min_height = setup_popup(standalone_popup_window, message)
                 standalone_popup_window.update_idletasks()
 
-                # get Scaling Factor
                 scale_factor = 1.0
                 if platform.system() == "Windows":
                     try:
@@ -795,9 +763,8 @@ def path_prompt_popup(message):
 
             except Exception as e:
                 print(f"Error during _standalone_popup_target execution: {e}")
-            finally: # Cleanup for this thread
+            finally:
                 print("Standalone popup mainloop ended.")
-                # Ensure standalone_popup_window is None if this thread exits,
                 if standalone_popup_window is not None:
                     standalone_popup_window = None
 
@@ -828,7 +795,7 @@ def validate_input(folder_name, extensions, original_folder=None):
         return False, f"Folder name '{folder_name_stripped}' is a reserved name."
     if '//' in folder_name_stripped or '\\\\' in folder_name_stripped:
         return False, f"Folder name '{folder_name_stripped}' contains multiple consecutive slashes or backslashes."
-    if folder_name_stripped.strip('/') == '': # Catches names like "/" or "///"
+    if folder_name_stripped.strip('/') == '':
         return False, "Folder name cannot be just slashes."
     if folder_name_stripped.startswith('/') or folder_name_stripped.endswith('/'):
         return False, "Folder name cannot start or end with a slash."
@@ -850,7 +817,7 @@ def validate_input(folder_name, extensions, original_folder=None):
             if folder_name_lower == existing_folder_key_lower and existing_folder_key_lower != original_folder_name_lower:
                 return False, f"Folder name '{folder_name_stripped}' already exists (used by category '{existing_folder_key_in_map}')."
 
-    # --- Extension validation ---
+    # Extension validation
     processed_extensions_for_check = [] 
 
     for ext_input in extensions: 
@@ -882,7 +849,7 @@ def validate_input(folder_name, extensions, original_folder=None):
     if not processed_extensions_for_check:
         return False, "At least one valid extension is required."
 
-    return True, "" # Validation passed
+    return True, ""
 # endregion
 
 
@@ -908,7 +875,7 @@ def process_extensions_string(extensions_str):
 class CategoryRow(ctk.CTkFrame):
     def __init__(self, master, config_window, folder_name, extensions, delete_icon):
         super().__init__(master)
-        self.pack(fill="x", padx=2, pady=0) # expand row horizontally
+        self.pack(fill="x", padx=2, pady=0)
 
         self.config_window = config_window
         self.original_folder = folder_name
@@ -960,14 +927,12 @@ class CategoryRow(ctk.CTkFrame):
         based on whether the folder name or extensions have been modified from
         their original saved state. It also sets the `is_dirty` flag which is
         used to track unsaved changes when closing the configuration window."""
-        self.is_dirty = is_changed # Update dirty state
+        self.is_dirty = is_changed
         if is_changed:
-            # Show Save and Reset buttons, hide Remove button
             self.save_button.pack(side="left", padx=2, pady=5)
             self.remove_button.place_forget()
             self.reset_button.pack(side="right", padx=2, pady=5)
         else:
-            # Hide Save and Reset buttons, show Remove button
             self.save_button.pack_forget()
             self.reset_button.pack_forget()
             self.remove_button.place(relx=0.5, rely=0.5, anchor="center")
@@ -976,43 +941,37 @@ class CategoryRow(ctk.CTkFrame):
         """Handle folder name entry changes"""
         new_folder_name = self.folder_entry_var.get().strip()
         current_extensions = self.extensions_textbox.get("1.0", "end-1c").strip()
-        # Check if current values differ from the last saved state
         is_changed = (new_folder_name != self.original_folder or
                       current_extensions != self.original_extensions_str)
-        self._handle_change(is_changed) # Update UI based on change status
+        self._handle_change(is_changed)
 
     def _on_textbox_change(self, event=None):
         """Handle extensions textbox changes"""
         current_folder = self.folder_entry_var.get().strip()
         new_ext = self.extensions_textbox.get("1.0", "end-1c").strip()
-        # Check if current values differ from the last saved state
         is_changed = (current_folder != self.original_folder or
                       new_ext != self.original_extensions_str)
-        self._handle_change(is_changed) # Update UI
+        self._handle_change(is_changed)
 
     def _handle_save_button_click(self):
         """Handles the click of the row's save button, showing errors if necessary."""
         save_result = self.save_entry_changes()
-        if isinstance(save_result, str): # Check if validation returned an error message
+        if isinstance(save_result, str):
             show_error_dialog(self.config_window, save_result)
-        # If save_result is True (success) or False (user cancelled sub-dialog), do nothing further here.
 
     def save_entry_changes(self):
         """Save changes to folder name and extensions, preserving order."""
         new_folder_name = self.folder_entry_var.get().strip()
         new_extensions_str = self.extensions_textbox.get("1.0", "end-1c").strip()
 
-        # Use the helper function
         ordered_unique_extensions = process_extensions_string(new_extensions_str)
 
-        # Use ordered_unique_extensions for validation
         is_valid, error_message = validate_input(new_folder_name, ordered_unique_extensions, original_folder=self.original_folder)
         if is_valid is None:
             return False
         if not is_valid:
             return error_message
 
-        # --- Save logic ---
         config_data = load_config()
         config_data['folder_extensions_mapping'].pop(self.original_folder, None)
         config_data['folder_extensions_mapping'][new_folder_name] = ordered_unique_extensions
@@ -1090,10 +1049,8 @@ class ConfigWindow(ctk.CTk):
         self.resizable(True, True)
         self.protocol("WM_DELETE_WINDOW", self.on_app_quit)
 
-        # --- Load Config Early for Geometry ---
         saved_geometry = config.get("window_geometry")
 
-        # --- Initialize delete_icon ---
         try:
             self.delete_icon = ctk.CTkImage(
                 light_image=Image.open(DELETE_PNG),
@@ -1104,7 +1061,6 @@ class ConfigWindow(ctk.CTk):
             print(f"Error loading delete image: {e}")
             self.delete_icon = None
 
-        # --- Initialize settings_icon ---
         try:
             self.settings_icon = ctk.CTkImage(
                 light_image=Image.open(SETTINGS_PNG),
@@ -1115,12 +1071,10 @@ class ConfigWindow(ctk.CTk):
             print(f"Error loading settings image: {e}")
             self.settings_icon = None
 
-        # --- Build UI Elements ---
         self._build_path_frame()
         self._build_add_frame()
         self._build_scrollable_frame() 
 
-        # --- Set Initial Geometry & Minimum Size ---
         geometry_applied = False
         if saved_geometry:
             try:
@@ -1141,17 +1095,15 @@ class ConfigWindow(ctk.CTk):
         min_height = 334
         self.minsize(min_width, min_height)
 
-        # --- Force update of main window geometry before populating scrollable frame ---
         self.update_idletasks() 
 
-        # --- Setup callbacks for cross-thread gui function calls ---
+        # Setup callbacks for cross-thread gui function calls
         file_sorter.set_gui_callbacks(
             self, 
             lambda msg: show_error_dialog(self, msg), 
             self.focus_app 
         )
 
-        # --- Defer initial rendering of scrollable content ---
         self.after_idle(self.render_scrollable_widget) 
 
         self.lift()
@@ -1160,55 +1112,43 @@ class ConfigWindow(ctk.CTk):
     def _center_window_fallback(self):
         """Centers the window on the screen (used for first launch or errors)."""
 
-        # Default desired size
         default_width = 547
         default_height = 700
 
         try:
-            # --- Set minimum size FIRST ---
             self.minsize(default_width, default_height)
 
-            # --- Apply initial size (position will be set later) ---
             self.geometry(f'{default_width}x{default_height}')
-            self.update_idletasks() # Process geometry and minsize changes
+            self.update_idletasks()
 
-            # --- Calculate Position using the INTENDED default size ---
             scale_factor = 1.0
             if platform.system() == "Windows":
                 try:
-                    # Prioritize ctypes for scaling
                     scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
-                    # print(f"Fallback Center: Using ctypes scale factor: {scale_factor}") # Optional debug
                 except Exception as e_ctypes:
                     print(f"Fallback Center: Error getting scaling via ctypes ({e_ctypes}), trying CTk...")
                     try:
-                        # Fallback to CTk ScalingTracker
                         scale_factor = ctk.ScalingTracker.get_window_dpi_scaling(self.winfo_id())
                     except Exception as e_ctk:
                         print(f"Fallback Center: Error getting scaling via CTk ({e_ctk}), using 1.0.")
-                        scale_factor = 1.0 # Ultimate fallback
-            # print(f"Fallback Center: Final Scale Factor: {scale_factor}") # Debug
+                        scale_factor = 1.0
 
             screen_width = self.winfo_screenwidth()
             screen_height = self.winfo_screenheight()
 
-            # Use the DEFAULT size for centering calculation
             actual_width_scaled = int(default_width * scale_factor)
             actual_height_scaled = int(default_height * scale_factor)
 
             x = max(0, (screen_width // 2) - (actual_width_scaled // 2))
             y = max(0, (screen_height // 2) - (actual_height_scaled // 2))
 
-            # --- Set final geometry using DEFAULT size and calculated position ---
             final_geometry = f'{default_width}x{default_height}+{x}+{y}'
             self.geometry(final_geometry)
             print(f"Centered window geometry: {final_geometry}")
 
         except Exception as e:
             print(f"Error during fallback centering: {e}")
-            # Apply a basic default if centering fails
             try:
-                # Use the default size variables here
                 self.geometry(f'{default_width}x{default_height}+100+100')
             except Exception as basic_e:
                 print(f"Failed to set even basic geometry: {basic_e}")
@@ -1226,15 +1166,7 @@ class ConfigWindow(ctk.CTk):
         return False
 
     def save_all_changes(self, render_on_success=True):
-        """Attempts to save changes in all dirty CategoryRow widgets.
-        Args:
-            render_on_success (bool): If True, re-renders the scrollable widget
-                                      if any changes were successfully saved.
-        Returns:
-            True if all saves were successful.
-            False if the user cancelled a sub-dialog during the save process.
-            str: The error message from the first validation failure encountered.
-        """
+        """Attempts to save changes in all dirty CategoryRow widgets."""
         rows_to_rerender = False
         first_error = None
         user_cancelled = False
@@ -1246,90 +1178,80 @@ class ConfigWindow(ctk.CTk):
             if row.is_dirty:
                 save_result = row.save_entry_changes()
 
-                if isinstance(save_result, str): # Validation error occurred
+                if isinstance(save_result, str):
                     first_error = save_result
-                    break # Stop processing on the first error
-                elif save_result is False: # User cancellation in a sub-dialog
+                    break
+                elif save_result is False:
                     user_cancelled = True
-                    break # Stop processing on cancellation
-                elif save_result is True: # Successful save for this row
+                    break
+                elif save_result is True:
                     rows_to_rerender = True
 
         if first_error:
-            return first_error # Return the specific validation error message
+            return first_error
 
         if user_cancelled:
             print("Save operation cancelled by user in a sub-dialog.")
-            return False # Indicate cancellation occurred
+            return False
 
-        # Only re-render if no errors/cancellations stopped us,
-        # some rows were actually saved, AND we are asked to render on success
         if rows_to_rerender and render_on_success:
             self.render_scrollable_widget()
 
-        return True # All dirty rows were processed successfully without errors or cancellations
-
+        return True
+    
     def on_app_quit(self):
         """Handles the application quit event, checking for unsaved changes."""
-        # --- Try to save geometry FIRST ---
         try:
-            # Ensure window still exists and update pending changes
             if self.winfo_exists():
-                self.update_idletasks() # Process pending events like resize/move
+                self.update_idletasks()
                 current_geometry = self.geometry()
-                # Basic check: Avoid saving clearly invalid small sizes if possible
-                # (This is a heuristic, might need adjustment)
                 try:
                     size_part = current_geometry.split('+')[0]
                     w_str, h_str = size_part.split('x')
-                    if int(w_str) > 50 and int(h_str) > 50: # Only save if size seems reasonable
+                    if int(w_str) > 50 and int(h_str) > 50:
                          save_config(window_geometry=current_geometry)
                          print(f"Saved geometry on quit attempt: {current_geometry}")
                     else:
                          print(f"Skipping save of potentially invalid geometry: {current_geometry}")
                 except Exception:
                      print(f"Could not parse geometry to validate size, saving anyway: {current_geometry}")
-                     save_config(window_geometry=current_geometry) # Save if parsing fails
+                     save_config(window_geometry=current_geometry)
             else:
                 print("Window already destroyed, cannot save geometry.")
         except Exception as e:
             print(f"Error saving window geometry during quit: {e}")
 
-        # --- Now handle unsaved changes ---
-        proceed_with_quit = True # Assume we can quit unless checks fail
+        proceed_with_quit = True
         if self.has_unsaved_changes():
             result = show_unsaved_changes_dialog(self)
             if result == "save":
                 save_outcome = self.save_all_changes(render_on_success=False)
                 if save_outcome is True:
-                    proceed_with_quit = True # Save successful, can quit
+                    proceed_with_quit = True
                 elif isinstance(save_outcome, str):
                     show_error_dialog(self, f"Failed to save changes:\n\n{save_outcome}")
-                    proceed_with_quit = False # Save failed, don't quit
+                    proceed_with_quit = False
                 elif save_outcome is False:
-                    proceed_with_quit = False # User cancelled save, don't quit
+                    proceed_with_quit = False
             elif result == "discard":
-                proceed_with_quit = True # Discarding, can quit
+                proceed_with_quit = True
             elif result == "cancel":
-                proceed_with_quit = False # User cancelled, don't quit
+                proceed_with_quit = False
         else:
-            # No unsaved changes
             proceed_with_quit = True
 
-        # --- Perform actual quit if allowed ---
         if proceed_with_quit:
             resume_watching()
             self._perform_quit()
         else:
-            print("Quit cancelled.") # User chose not to quit or save failed
+            print("Quit cancelled.")
 
     def _perform_quit(self):
         """Actually destroys the window and cleans up references."""
         global app
-        print("Performing quit...") # Added print
+        print("Performing quit...")
 
-        # --- Clear References ---
-        # References are cleared after geometry is saved in on_app_quit
+        # Clear References
         if app is self:
             app = None
         if file_sorter.gui_app_instance is self:
@@ -1337,7 +1259,6 @@ class ConfigWindow(ctk.CTk):
             file_sorter.show_error_dialog = None
             file_sorter.focus_app = None
 
-        # --- Destroy Window ---
         try:
             if self.winfo_exists():
                 self.destroy()
@@ -1351,11 +1272,10 @@ class ConfigWindow(ctk.CTk):
             if self.winfo_exists():
                 self.lift()
                 self.focus_force()
-                # Optional: De-iconify if minimized (platform-dependent)
                 if platform.system() == "Windows":
-                    self.wm_state('normal') # Should restore from minimized
+                    self.wm_state('normal')
                 else:
-                    self.deiconify() # General Tkinter method
+                    self.deiconify()
         except Exception as e:
             print(f"Error focusing app window: {e}")
 
@@ -1462,7 +1382,6 @@ class ConfigWindow(ctk.CTk):
         new_category_label = ctk.CTkLabel(add_frame, text="New Category Name:", font=FONTS['semibold_13'])
         new_category_label.grid(row=0, column=0, sticky="w", padx=(10, 5), pady=7)
         self.new_category_entry = ctk.CTkEntry(add_frame, height=25, font=FONTS['semibold_12'])
-        # sticky="ew" makes the entry fill its grid cell horizontally
         self.new_category_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=7)
 
         new_extensions_label = ctk.CTkLabel(add_frame, text="Extensions (comma separated):", font=FONTS['semibold_13'])
@@ -1487,10 +1406,8 @@ class ConfigWindow(ctk.CTk):
         folder_name = self.new_category_entry.get().strip()
         extensions_input = self.new_extensions_entry.get().strip()
 
-        # Use the helper function
         ordered_unique_extensions = process_extensions_string(extensions_input)
 
-        # Use ordered_unique_extensions for validation
         is_valid, error_message = validate_input(folder_name, ordered_unique_extensions)
         
         if is_valid is None: return
@@ -1498,7 +1415,6 @@ class ConfigWindow(ctk.CTk):
             show_error_dialog(self, error_message)
             return
 
-        # config should be loaded already
         config['folder_extensions_mapping'][folder_name] = ordered_unique_extensions
         save_config(folder_extensions_mapping=config['folder_extensions_mapping'])
 
@@ -1513,15 +1429,14 @@ class ConfigWindow(ctk.CTk):
         dialog.title("Settings")
         dialog.resizable(False, False)
 
-        # Main content frame with padding
         content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         content_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # --- Settings Groups Frame ---
+        # Settings Groups Frame
         settings_frame = ctk.CTkFrame(content_frame, fg_color="#232323", corner_radius=10)
         settings_frame.pack(fill="x", pady=(0, 15), ipady=5)
 
-        # --- Notification Settings Group ---
+        # Notification Settings Group
         notif_section = ctk.CTkFrame(settings_frame, fg_color="transparent")
         notif_section.pack(fill="x", padx=15, pady=(8, 5))
         
@@ -1541,11 +1456,10 @@ class ConfigWindow(ctk.CTk):
         notif_separator = ctk.CTkFrame(notif_section, height=1, fg_color="#3a3a3a")
         notif_separator.pack(fill="x", pady=(0, 6))
 
-        # Setting container (adds visual separation)
+        # Setting container
         notif_container = ctk.CTkFrame(notif_section, fg_color="#2a2a2a", corner_radius=6)
         notif_container.pack(fill="x", padx=5, pady=(0, 3))
         
-        # --- Custom darkmode checkbox style (white tick) ---
         notif_var = ctk.BooleanVar(value=config.get("enable_notifications", True))
         notif_checkbox = ctk.CTkCheckBox(
             notif_container,
@@ -1561,7 +1475,7 @@ class ConfigWindow(ctk.CTk):
         )
         notif_checkbox.pack(anchor="w", padx=10, pady=(12, 12))
 
-        # --- UI Settings Group ---
+        # UI Settings Group
         ui_section = ctk.CTkFrame(settings_frame, fg_color="transparent")
         ui_section.pack(fill="x", padx=15, pady=(5, 5))
         
@@ -1581,11 +1495,10 @@ class ConfigWindow(ctk.CTk):
         ui_separator = ctk.CTkFrame(ui_section, height=1, fg_color="#3a3a3a")
         ui_separator.pack(fill="x", pady=(0, 6))
 
-        # Setting container (adds visual separation)
+        # Setting container
         ui_container = ctk.CTkFrame(ui_section, fg_color="#2a2a2a", corner_radius=6)
         ui_container.pack(fill="x", padx=5, pady=(0, 3))
         
-        # --- Custom darkmode checkbox style (white tick) ---
         confirm_delete_var = ctk.BooleanVar(value=not config.get("dont_show_again", False))
         confirm_delete_checkbox = ctk.CTkCheckBox(
             ui_container,
@@ -1601,7 +1514,7 @@ class ConfigWindow(ctk.CTk):
         )
         confirm_delete_checkbox.pack(anchor="w", padx=10, pady=(12, 12))
 
-        # --- Advanced Settings Group ---
+        # Advanced Settings Group
         advanced_section = ctk.CTkFrame(settings_frame, fg_color="transparent")
         advanced_section.pack(fill="x", padx=15, pady=(5, 0))
         
@@ -1647,7 +1560,7 @@ class ConfigWindow(ctk.CTk):
         )
         config_folder_btn.pack(anchor="w")
 
-        # --- Button Frame ---
+        # Button Frame
         button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
         button_frame.pack(fill="x", pady=(0, 5))
         button_frame.columnconfigure(0, weight=1) 
@@ -1708,15 +1621,12 @@ class ConfigWindow(ctk.CTk):
 
     def render_scrollable_widget(self):
         """Renders the list of existing categories using CategoryRow."""
-        # Destroy existing widgets first
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
-        # Build Header using the same structure as CategoryRow
         header_frame = ctk.CTkFrame(self.scrollable_frame)
         header_frame.pack(fill="x", padx=2, pady=5)
 
-        # --- Folder Column ---
         folders_frame = ctk.CTkFrame(
             header_frame,
             corner_radius=10,
@@ -1725,7 +1635,7 @@ class ConfigWindow(ctk.CTk):
         )
         folders_frame.pack_propagate(False)
         folders_frame.pack(side="left", fill="x", expand=True, padx=(5,2), pady=5)
-        # put the label in its own bubble
+
         folder_label_frame = ctk.CTkFrame(
             folders_frame,
             corner_radius=8,
@@ -1749,7 +1659,6 @@ class ConfigWindow(ctk.CTk):
             x_offset=0, y_offset=20, alpha=0.92, font=FONTS['regular_11']
         )
 
-        # --- Extensions Column ---
         extensions_frame = ctk.CTkFrame(
             header_frame,
             corner_radius=10,
@@ -1758,7 +1667,7 @@ class ConfigWindow(ctk.CTk):
         )
         extensions_frame.pack_propagate(False)
         extensions_frame.pack(side="left", fill="x", expand=True, padx=(12,0), pady=5)
-        # put the label in its own bubble
+
         ext_label_frame = ctk.CTkFrame(
             extensions_frame,
             corner_radius=8,
@@ -1784,7 +1693,6 @@ class ConfigWindow(ctk.CTk):
         )
 
 
-        # --- Settings Button Column ---
         button_frame = ctk.CTkFrame(
             header_frame,
             width=90,
@@ -1806,10 +1714,8 @@ class ConfigWindow(ctk.CTk):
         )
         settings_button.place(relx=0.5, rely=0.5, anchor="center")
 
-        # config should be loaded already
         sorted_folder_extensions = sorted(config['folder_extensions_mapping'].items(), key=lambda item: item[0].lower())
 
-        # Build Rows
         for folder, extensions in sorted_folder_extensions:
             CategoryRow(
                 master=self.scrollable_frame,
@@ -1832,12 +1738,11 @@ def launch_config_gui():
         app.focus_app()
         return app
 
-    # If standalone path prompt popup is active or its thread is running, ensure it's closed and thread terminated
     popup_was_active = False
     if standalone_popup_window is not None:
         popup_was_active = True
         print("Standalone popup window object exists. Attempting to close.")
-        _destroy_standalone_popup() # standalone_popup_window to None
+        _destroy_standalone_popup()
 
     if standalone_popup_thread is not None and standalone_popup_thread.is_alive():
         popup_was_active = True
@@ -1860,7 +1765,7 @@ def launch_config_gui():
     try:
         config_window.mainloop()
     finally:
-        # ensure 'app' is cleared if the mainloop exits unexpectedly 
+        # mainloop exited unexpectedly 
         if app is config_window and (not hasattr(config_window, '_w') or not config_window.winfo_exists()):
             app = None
             print("ConfigWindow mainloop exited, global 'app' reference cleared in launch_config_gui.")

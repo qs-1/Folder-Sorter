@@ -25,7 +25,6 @@ def get_config_directory():
         # Use ~/.config
         config_dir = os.path.join(os.path.expanduser('~'), '.config', 'FolderSorter')
     
-    # Create directory if it doesn't exist
     os.makedirs(config_dir, exist_ok=True)
     return config_dir
 
@@ -83,15 +82,13 @@ def save_config(
     show_auto_sort_confirmation=None
 ): 
     global config
-    if config is None: # Ensure config is loaded if save is called before load 
+    if config is None:
         load_config()
-    # Update config keys
     if folder_path is not None: # Check for None explicitly if empty string is valid
         config['folder_path'] = folder_path
     if folder_extensions_mapping is not None:
         config['folder_extensions_mapping'] = folder_extensions_mapping
     if duplicates_checked_path:
-        # Ensure the list exists before appending
         if 'duplicates_checked_paths' not in config or not isinstance(config['duplicates_checked_paths'], list):
             config['duplicates_checked_paths'] = []
         config['duplicates_checked_paths'].append(duplicates_checked_path)
@@ -105,10 +102,9 @@ def save_config(
         config['show_auto_sort_confirmation'] = show_auto_sort_confirmation
 
     try:
-        # Ensure config is not None before saving
         if config is not None:
             config_dir = os.path.dirname(CONFIG_FILE)
-            os.makedirs(config_dir, exist_ok=True) # Create dir if it doesn't exist 
+            os.makedirs(config_dir, exist_ok=True)
             
             with open(CONFIG_FILE, 'w') as f:
                 dump(config, f, indent=4)
@@ -123,9 +119,7 @@ def save_config(
 
 def load_config():
     global config
-    # If config is already loaded and seems valid, return it
     if config and 'folder_path' in config and 'folder_extensions_mapping' in config:
-         # Ensure all expected keys exist, adding defaults if missing
          config.setdefault('duplicates_checked_paths', [])
          config.setdefault('dont_show_again', False)
          config.setdefault('window_geometry', None)
@@ -164,10 +158,8 @@ def load_config():
         try:
             with open(CONFIG_FILE, 'r') as f:
                 loaded_data = load(f)
-                # Basic validation
                 if isinstance(loaded_data, dict) and 'folder_path' in loaded_data and 'folder_extensions_mapping' in loaded_data:
                     config = loaded_data
-                    # Ensure all expected keys exist, adding defaults if missing
                     config.setdefault('duplicates_checked_paths', [])
                     config.setdefault('dont_show_again', False)
                     config.setdefault('window_geometry', None)
@@ -180,15 +172,13 @@ def load_config():
         except (IOError, JSONDecodeError) as e:
             print(f"Error loading config: {e}. Loading default config.")
 
-    # Use default if file doesn't exist, is invalid, or error occurred
     print("Loading default configuration.")
     config = default_config
-    # Save the default config immediately so the file exists
     save_config(
         folder_path=config['folder_path'],
         folder_extensions_mapping=config['folder_extensions_mapping'],
         dont_show_again=config['dont_show_again'],
-        window_geometry=config['window_geometry'], # Save the default None
+        window_geometry=config['window_geometry'],
         auto_sort_enabled=config['auto_sort_enabled'],
         show_auto_sort_confirmation=config['show_auto_sort_confirmation']
     )
