@@ -1,4 +1,5 @@
 from os import path, makedirs, listdir, remove
+import os
 from shutil import move
 from threading import Thread, Timer
 from win11toast import toast
@@ -75,7 +76,8 @@ def sort_files(files_to_sort=None, show_notification_on_success=True):
 
     try:
         if files_to_sort is None:
-            source_files = listdir(folder_path)
+            with os.scandir(folder_path) as entries:
+                source_files = [entry.name for entry in entries if entry.is_file()]
         else:
             source_files = files_to_sort
     except OSError as e:
@@ -94,16 +96,6 @@ def sort_files(files_to_sort=None, show_notification_on_success=True):
 
     for original_filename in source_files:
         file_path = path.join(folder_path, original_filename)
-
-        try:
-            if not path.isfile(file_path):
-                # print(f"Skipping non-file item: '{original_filename}'") # Debug
-                continue
-        except OSError as e:
-            print(f"Could not determine if '{original_filename}' is a file: {e}. Skipping.")
-            if show_error_dialog:
-                 _schedule_on_gui_thread(show_error_dialog, f"Error accessing '{original_filename}': {str(e)}. Skipping.")
-            continue
 
         # Process only files with extensions
         if '.' in original_filename:
@@ -292,8 +284,6 @@ class BatchingEventHandler(FileSystemEventHandler):
 
 observer = None
 observer_handler = None
-
-
 def start_watching():
     global observer, observer_handler
     if observer and observer.is_alive():
