@@ -73,7 +73,15 @@ except OSError as e:
 # Global config variable
 config = None
 
-def save_config(folder_path=None, folder_extensions_mapping=None, duplicates_checked_path=None, dont_show_again=None, window_geometry=None): 
+def save_config(
+    folder_path=None,
+    folder_extensions_mapping=None,
+    duplicates_checked_path=None,
+    dont_show_again=None,
+    window_geometry=None,
+    auto_sort_enabled=None,
+    show_auto_sort_confirmation=None
+): 
     global config
     if config is None: # Ensure config is loaded if save is called before load 
         load_config()
@@ -91,6 +99,10 @@ def save_config(folder_path=None, folder_extensions_mapping=None, duplicates_che
         config['dont_show_again'] = dont_show_again
     if window_geometry is not None: 
         config['window_geometry'] = window_geometry
+    if auto_sort_enabled is not None:
+        config['auto_sort_enabled'] = auto_sort_enabled
+    if show_auto_sort_confirmation is not None:
+        config['show_auto_sort_confirmation'] = show_auto_sort_confirmation
 
     try:
         # Ensure config is not None before saving
@@ -117,6 +129,8 @@ def load_config():
          config.setdefault('duplicates_checked_paths', [])
          config.setdefault('dont_show_again', False)
          config.setdefault('window_geometry', None)
+         config.setdefault('auto_sort_enabled', False)
+         config.setdefault('show_auto_sort_confirmation', True)
          return config
 
     default_config = {
@@ -141,7 +155,9 @@ def load_config():
         },
         'duplicates_checked_paths': [],
         'dont_show_again': False,
-        'window_geometry': None
+        'window_geometry': None,
+        'auto_sort_enabled': False,
+        'show_auto_sort_confirmation': True
     }
 
     if path.exists(CONFIG_FILE):
@@ -155,6 +171,8 @@ def load_config():
                     config.setdefault('duplicates_checked_paths', [])
                     config.setdefault('dont_show_again', False)
                     config.setdefault('window_geometry', None)
+                    config.setdefault('auto_sort_enabled', False)
+                    config.setdefault('show_auto_sort_confirmation', True)
                     print("Config loaded successfully.")
                     return config
                 else:
@@ -170,7 +188,9 @@ def load_config():
         folder_path=config['folder_path'],
         folder_extensions_mapping=config['folder_extensions_mapping'],
         dont_show_again=config['dont_show_again'],
-        window_geometry=config['window_geometry'] # Save the default None
+        window_geometry=config['window_geometry'], # Save the default None
+        auto_sort_enabled=config['auto_sort_enabled'],
+        show_auto_sort_confirmation=config['show_auto_sort_confirmation']
     )
     return config
 

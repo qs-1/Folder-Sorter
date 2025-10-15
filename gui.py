@@ -25,6 +25,7 @@ from config_manager import (
     APP_ICON, DELETE_PNG, SETTINGS_PNG, REGULAR_FONT, SEMIBOLD_FONT
 )
 import file_sorter
+from tray_handler import restart_watcher_if_running, pause_watching, resume_watching
 
 # Force dark mode (realized light mode is broken, will fix soon)
 ctk.set_appearance_mode("dark")
@@ -319,6 +320,122 @@ def show_folder_exists_dialog(parent_window, folder_path, folder_name):
     dialog.grab_set()
     dialog.focus_force()
     parent_window.wait_window(dialog)
+
+    return dialog.result
+# endregion
+
+# region Auto-sort confirmation
+def show_auto_sort_confirmation_dialog(parent_window):
+    """Shows a confirmation dialog for enabling auto-sort."""
+    is_standalone = not (parent_window and parent_window.winfo_exists())
+
+    if is_standalone:
+        dialog_root = ctk.CTk()
+        dialog_root.withdraw()
+        initialize_app_fonts()
+        dialog = ToplevelIco(dialog_root, APP_ICON)
+    else:
+        dialog_root = parent_window
+        dialog = ToplevelIco(dialog_root, APP_ICON)
+
+    dialog.title("Enable Auto-Sort?")
+    dialog.result = False
+
+    content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    content_frame.columnconfigure(0, weight=1)
+    content_frame.rowconfigure(0, weight=1)
+    content_frame.rowconfigure(1, weight=0)
+    content_frame.rowconfigure(2, weight=0)
+
+    label = ctk.CTkLabel(
+        content_frame,
+        text="Enabling auto-sort will automatically move new files in the target folder.\n\nAre you sure you want to continue?",
+        font=FONTS['semibold_14'],
+        wraplength=380,
+    )
+    label.grid(row=0, column=0, sticky="nsew", pady=(0, 15))
+
+    checkbox_var = ctk.StringVar(value="0")
+    checkbox = ctk.CTkCheckBox(
+        content_frame,
+        text="Don't ask again",
+        variable=checkbox_var,
+        onvalue="1", offvalue="0",
+        font=FONTS['semibold_12'],
+        checkbox_width=18, checkbox_height=18
+    )
+    checkbox.grid(row=1, column=0, pady=(0, 15))
+
+    button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+    button_frame.grid(row=2, column=0, sticky="ew")
+    button_frame.columnconfigure(0, weight=1)
+    button_frame.columnconfigure(1, weight=0)
+    button_frame.columnconfigure(2, weight=1)
+    button_frame.columnconfigure(3, weight=0)
+    button_frame.columnconfigure(4, weight=1)
+
+    def on_yes():
+        if checkbox_var.get() == "1":
+            from config_manager import save_config
+            save_config(show_auto_sort_confirmation=False)
+        dialog.result = True
+        dialog.destroy()
+
+    def on_no():
+        dialog.result = False
+        dialog.destroy()
+
+    yes_button = ctk.CTkButton(
+        button_frame,
+        text="Yes",
+        width=80,
+        font=FONTS['semibold_12'],
+        text_color="#13140e",
+        fg_color="#a3ab8a",
+        hover_color="#858e6e",
+        command=on_yes
+    )
+    yes_button.grid(row=0, column=1, padx=10, pady=10)
+
+    no_button = ctk.CTkButton(
+        button_frame,
+        text="No",
+        width=80,
+        fg_color="#343638",
+        hover_color="#2d2a2e",
+        font=FONTS['semibold_12'],
+        command=on_no
+    )
+    no_button.grid(row=0, column=3, padx=10, pady=10)
+
+    dialog.update_idletasks()
+    min_width = max(380, label.winfo_reqwidth() + 40)
+    min_height = (label.winfo_reqheight() + checkbox.winfo_reqheight() +
+                  button_frame.winfo_reqheight() + 80)
+    dialog.minsize(min_width, min_height)
+    dialog.resizable(False, False)
+
+    dialog.protocol("WM_DELETE_WINDOW", on_no)
+
+    if is_standalone:
+        screen_width = dialog.winfo_screenwidth()
+        screen_height = dialog.winfo_screenheight()
+        x = max(0, (screen_width // 2) - (min_width // 2))
+        y = max(0, (screen_height // 2) - (min_height // 2))
+        dialog.geometry(f'{min_width}x{min_height}+{x}+{y}')
+    else:
+        dialog.center_window(width=min_width, height=min_height)
+
+    if not is_standalone and parent_window and parent_window.winfo_exists():
+        dialog.transient(parent_window)
+    dialog.grab_set()
+    dialog.focus_force()
+
+    dialog_root.wait_window(dialog)
+
+    if is_standalone and dialog_root.winfo_exists():
+        dialog_root.destroy()
 
     return dialog.result
 # endregion
@@ -966,6 +1083,7 @@ class CategoryRow(ctk.CTkFrame):
 class ConfigWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
+        pause_watching()
         initialize_app_fonts() 
         self.title("Configure Folder Sorter")
         self.iconbitmap(APP_ICON)
@@ -1200,6 +1318,7 @@ class ConfigWindow(ctk.CTk):
 
         # --- Perform actual quit if allowed ---
         if proceed_with_quit:
+            resume_watching()
             self._perform_quit()
         else:
             print("Quit cancelled.") # User chose not to quit or save failed
@@ -1317,6 +1436,7 @@ class ConfigWindow(ctk.CTk):
         if folder_path_selected:
             save_config(folder_path=folder_path_selected)
             self.refresh_path_display(folder_path_selected)
+            restart_watcher_if_running()
 
     def _on_path_click(self, event=None):
         current_path = config.get('folder_path')

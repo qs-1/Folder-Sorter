@@ -1,9 +1,12 @@
 from os import path, makedirs, listdir, remove
 from shutil import move
-from threading import Thread
+from threading import Thread, Timer
 from win11toast import toast
-from config_manager import load_config, SORT_LOG_FILE
+from config_manager import load_config, save_config, SORT_LOG_FILE
 import json
+import time
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 # Global variables for GUI callbacks and app instance
 gui_app_instance = None
@@ -58,7 +61,7 @@ def show_notification(folder_path):
         app_id='Folder Sorter'
     )
 
-def sort_files():
+def sort_files(files_to_sort=None, show_notification_on_success=True):
     config_data = load_config()
     folder_path = config_data.get('folder_path', '')
 
@@ -71,10 +74,10 @@ def sort_files():
     moved_files_log = [] # To log file movements for undo
 
     try:
-        source_files = listdir(folder_path)
-        if not source_files:
-            print(f"No files found in '{folder_path}' to sort.")
-            return None # Nothing to do
+        if files_to_sort is None:
+            source_files = listdir(folder_path)
+        else:
+            source_files = files_to_sort
     except OSError as e:
         err_msg = f"Error reading source folder '{folder_path}': {str(e)}"
         if show_error_dialog:
@@ -82,6 +85,10 @@ def sort_files():
         else:
             print(err_msg)
         return f"Could not read source folder: {folder_path}"
+
+    if files_to_sort is None and not source_files:
+        print(f"No files found in '{folder_path}' to sort.")
+        return None
 
     print(f"Starting sort for {len(source_files)} items in '{folder_path}'...")
 
@@ -144,12 +151,8 @@ def sort_files():
                             "destination": destination_file_path
                         })
                         print(f"Successfully moved: '{original_filename}' to '{destination_file_path}'")
-                    except OSError as e:
-                        err_msg = f"Error moving file '{original_filename}' to '{target_folder_path}': {str(e)}"
-                        if show_error_dialog:
-                            _schedule_on_gui_thread(show_error_dialog, err_msg)
-                        else:
-                            print(err_msg)
+                    except (OSError, PermissionError) as e:
+                        print(f"Could not move file '{original_filename}'. Skipping. Error: {e}")
                     except Exception as e: 
                         err_msg = f"Unexpected error moving file '{original_filename}' to '{target_folder_path}': {str(e)}"
                         if show_error_dialog:
@@ -162,15 +165,30 @@ def sort_files():
                     # and move to the next file in the source_files list.
                     break 
     
-    # Save the moved files log to SORT_LOG_FILE
-    with open(SORT_LOG_FILE, 'w') as f:
-        json.dump(moved_files_log, f, indent=4)
-
     if files_moved:
         print("File sorting process completed. Some files were moved.")
-        notification_thread = Thread(target=show_notification, args=(folder_path,))
-        notification_thread.daemon = True
-        notification_thread.start()
+        try:
+            with open(SORT_LOG_FILE, 'r') as f:
+                existing_log = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            existing_log = []
+
+        if isinstance(existing_log, list) and existing_log and isinstance(existing_log[0], dict):
+            all_sort_sessions = [existing_log]
+        elif isinstance(existing_log, list):
+            all_sort_sessions = existing_log
+        else:
+            all_sort_sessions = []
+
+        all_sort_sessions.append(moved_files_log)
+
+        with open(SORT_LOG_FILE, 'w') as f:
+            json.dump(all_sort_sessions, f, indent=4)
+
+        if show_notification_on_success:
+            notification_thread = Thread(target=show_notification, args=(folder_path,))
+            notification_thread.daemon = True
+            notification_thread.start()
     else:
         # No files matched any criteria, or all matched files failed to move,
         # or the source_files list was empty initially
@@ -185,19 +203,24 @@ def undo_last_sort():
         print("No sort operation to undo.")
         return
 
-    with open(SORT_LOG_FILE, 'r') as f:
-        try:
-            moved_files_log = json.load(f)
-        except json.JSONDecodeError:
-            print("Error reading sort log. Cannot undo.")
-            return
+    try:
+        with open(SORT_LOG_FILE, 'r') as f:
+            all_sort_sessions = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        print("Error reading sort log. Cannot undo.")
+        return
 
-    if not moved_files_log:
+    if isinstance(all_sort_sessions, list) and all_sort_sessions and isinstance(all_sort_sessions[0], dict):
+        last_session = all_sort_sessions
+        all_sort_sessions = []
+    elif isinstance(all_sort_sessions, list) and all_sort_sessions:
+        last_session = all_sort_sessions.pop()
+    else:
         print("Sort log is empty. Nothing to undo.")
         return
 
     print("Starting undo operation...")
-    for move_record in reversed(moved_files_log):
+    for move_record in reversed(last_session):
         source = move_record["source"]
         destination = move_record["destination"]
 
@@ -210,9 +233,95 @@ def undo_last_sort():
         except Exception as e:
             print(f"Error undoing move for '{destination}': {e}")
 
-    # Clear the log file after undo
-    try:
-        remove(SORT_LOG_FILE)
-        print("Undo operation complete.")
-    except OSError as e:
-        print(f"Error removing sort log file: {e}")
+    if all_sort_sessions:
+        with open(SORT_LOG_FILE, 'w') as f:
+            json.dump(all_sort_sessions, f, indent=4)
+    else:
+        try:
+            remove(SORT_LOG_FILE)
+        except OSError as e:
+            print(f"Error removing sort log file: {e}")
+    print("Undo operation complete.")
+
+
+class BatchingEventHandler(FileSystemEventHandler):
+    def __init__(self, batch_time=2.0):
+        super().__init__()
+        self.batch_time = batch_time
+        self.files_to_sort = set()
+        self.timer = None
+
+    def on_created(self, event):
+        if not event.is_directory:
+            print(f"New file detected: {event.src_path}")
+            self.files_to_sort.add(path.basename(event.src_path))
+
+            if self.timer:
+                self.timer.cancel()
+                self.timer = None
+
+            self.timer = Timer(self.batch_time, self._process_batch)
+            self.timer.start()
+
+    def on_deleted(self, event):
+        config_data = load_config()
+        folder_path = config_data.get('folder_path', '')
+        if folder_path and path.normpath(event.src_path) == path.normpath(folder_path):
+            print(f"Error: Watched folder '{folder_path}' has been deleted or is inaccessible.")
+            if self.timer:
+                self.timer.cancel()
+                self.timer = None
+            if show_error_dialog:
+                _schedule_on_gui_thread(
+                    show_error_dialog,
+                    f"The folder '{folder_path}' is no longer accessible. Auto-sort has been disabled."
+                )
+            save_config(auto_sort_enabled=False)
+            from tray_handler import force_disable_auto_sort
+            force_disable_auto_sort()
+
+    def _process_batch(self):
+        if self.timer:
+            self.timer = None
+        if self.files_to_sort:
+            print(f"Processing batch of {len(self.files_to_sort)} files.")
+            files_batch = list(self.files_to_sort)
+            self.files_to_sort.clear()
+            sort_files(files_to_sort=files_batch, show_notification_on_success=False)
+
+
+observer = None
+observer_handler = None
+
+
+def start_watching():
+    global observer, observer_handler
+    if observer and observer.is_alive():
+        print("Auto-sort watcher already running.")
+        return
+
+    config_data = load_config()
+    folder_path = config_data.get('folder_path', '')
+    if folder_path and path.isdir(folder_path):
+        observer_handler = BatchingEventHandler()
+        observer = Observer()
+        observer.schedule(observer_handler, folder_path, recursive=False)
+        observer.start()
+        print(f"Started watching {folder_path}")
+    else:
+        print("Auto-sort watcher could not start. Folder path is invalid.")
+
+
+def stop_watching():
+    global observer, observer_handler
+    if observer:
+        observer.stop()
+        observer.join()
+        observer = None
+    if observer_handler and observer_handler.timer:
+        observer_handler.timer.cancel()
+        observer_handler.timer = None
+    if observer_handler:
+        observer_handler.files_to_sort.clear()
+        observer_handler = None
+    print("Stopped watching.")

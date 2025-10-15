@@ -3,3 +3,4 @@ pystray
 Pillow
 CTkToolTip
 win11toast
+watchdog

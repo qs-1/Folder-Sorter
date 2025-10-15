@@ -1,15 +1,58 @@
 from threading import Thread
 from PIL import Image
-from config_manager import APP_ICON, SORT_LOG_FILE
+from config_manager import APP_ICON, SORT_LOG_FILE, config, save_config
 from pystray import Icon, Menu, MenuItem
 import os
 
 import file_sorter
-import gui
 
 # Global reference to the tray app and GUI thread to keep track of when they are running
 tray_app = None
 config_gui_thread = None
+auto_sort_enabled = config.get('auto_sort_enabled', False)
+watcher_is_paused = False
+
+
+def restart_watcher_if_running():
+    """Stops and restarts the file watcher if auto-sort is enabled.
+    This is used when the folder path changes."""
+    global auto_sort_enabled, watcher_is_paused
+    if auto_sort_enabled and not watcher_is_paused:
+        print("Folder path changed, restarting watcher...")
+        file_sorter.stop_watching()
+        file_sorter.start_watching()
+
+
+def pause_watching():
+    """Pauses the file watcher without changing the user's enabled setting."""
+    global watcher_is_paused
+    if auto_sort_enabled and not watcher_is_paused:
+        file_sorter.stop_watching()
+        watcher_is_paused = True
+        print("Auto-sort paused.")
+
+
+def resume_watching():
+    """Resumes the file watcher if it was paused."""
+    global watcher_is_paused
+    if auto_sort_enabled and watcher_is_paused:
+        file_sorter.start_watching()
+        watcher_is_paused = False
+        print("Auto-sort resumed.")
+
+
+def force_disable_auto_sort():
+    """Called when the watched folder is deleted."""
+    global auto_sort_enabled, watcher_is_paused
+    if auto_sort_enabled:
+        file_sorter.stop_watching()
+        auto_sort_enabled = False
+        watcher_is_paused = False
+        save_config(auto_sort_enabled=False)
+        print("Auto-sort has been forcibly disabled.")
+
+
+import gui
 
 def run_sort_files():
     """Run the file sorting operation, showing a popup if needed in its own thread."""
@@ -52,6 +95,29 @@ def open_config_gui():
     print("Starting new Config GUI thread.")
     config_gui_thread = Thread(target=_config_gui_target, daemon=True)
     config_gui_thread.start()
+
+
+def toggle_auto_sort(icon, item):
+    global auto_sort_enabled, watcher_is_paused
+    parent = gui.app if gui.app and gui.app.winfo_exists() else None
+    if not auto_sort_enabled:
+        if config.get('show_auto_sort_confirmation', True):
+            if not gui.show_auto_sort_confirmation_dialog(parent):
+                return
+
+    auto_sort_enabled = not auto_sort_enabled
+    save_config(auto_sort_enabled=auto_sort_enabled)
+    if auto_sort_enabled:
+        if parent:
+            file_sorter.stop_watching()
+            watcher_is_paused = True
+            print("Auto-sort enabled but paused while configuration window is open.")
+        else:
+            file_sorter.start_watching()
+            watcher_is_paused = False
+    else:
+        file_sorter.stop_watching()
+        watcher_is_paused = False
 
 def quit_app():
     """Quit the application and stop the tray icon"""
@@ -109,8 +175,13 @@ def setup_tray():
 
     # Create menu items
     menu = Menu(
-        MenuItem('Sort Folder', run_sort_files),
-        MenuItem('Undo Last Sort', file_sorter.undo_last_sort, enabled=lambda item: os.path.exists(SORT_LOG_FILE)),
+        MenuItem('Sort Folder', run_sort_files, enabled=lambda item: not auto_sort_enabled),
+        MenuItem(
+            'Undo Last Sort',
+            file_sorter.undo_last_sort,
+            enabled=lambda item: os.path.exists(SORT_LOG_FILE) and not auto_sort_enabled
+        ),
+        MenuItem('Enable Auto-Sort', toggle_auto_sort, checked=lambda item: auto_sort_enabled),
         MenuItem('Configure', open_config_gui), # will run in a separate thread
         MenuItem('Quit', quit_app)
     )
@@ -131,4 +202,8 @@ def start_tray_thread():
     tray_thread = Thread(target=setup_tray, daemon=True)
     tray_thread.start()
     return tray_thread
+
+
+if auto_sort_enabled:
+    file_sorter.start_watching()
 
